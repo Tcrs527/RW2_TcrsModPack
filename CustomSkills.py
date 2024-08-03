@@ -22,7 +22,7 @@ class Librarian(Upgrade):
 		self.name = "librarian"
 		self.tags = [Tags.Word, Tags.Sorcery]
 		self.asset = ["TcrsCustomModpack", "Icons", "librarian"]
-		self.level = 0
+		self.level = 7
 		self.description = "Whenever you cast a level 6 or greater spell, summon a number of living scrolls of that spell's tags equal to the level of the spell.\nCan summon: [Fire], [Ice], [Lightning], [Nature], [Arcane], [Dark], [Holy], [Metallic], [Chaos], and [Blood] scrolls."
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.scrolls = ScrollConvertor()
@@ -35,8 +35,8 @@ class Librarian(Upgrade):
 		unit.team = self.owner.team
 		spell = copy.deepcopy(self.scrolls.get(tag)[0])
 		spell.statholder = self.owner
-		grant_minion_spell(spell, unit, self.owner, 3)
-		self.summon(unit,sort_dist=False)
+		grant_minion_spell(spell, unit, self.owner, 0)
+		self.summon(unit, radius=4, sort_dist=False)
 		yield
 
 	def on_spell_cast(self, evt):
@@ -60,7 +60,7 @@ class BoneShaping(Upgrade):
 	def on_init(self):
 		self.name = "Bone Shaping"
 		self.tags = [Tags.Blood, Tags.Translocation]
-		self.level = 0
+		self.level = 4
 		self.asset = ["TcrsCustomModpack", "Icons", "boneshaping"]
 		self.owner_triggers[EventOnMoved] = self.on_moved
 		self.lastx = 0
@@ -101,7 +101,7 @@ class FromAshes(Upgrade):
 	def on_init(self):
 		self.name = "From the Ashes"
 		self.tags = [Tags.Fire, Tags.Holy, Tags.Conjuration]
-		self.level = 0
+		self.level = 5
 		self.asset = ["TcrsCustomModpack", "Icons", "Testshape3"] ##TODO fix
 		
 		self.num_summons = 1
@@ -171,7 +171,7 @@ class Lucky13(Upgrade):
 		self.name = "Symbol of Chaos"
 		self.asset = ["TcrsCustomModpack", "Icons", "luckynumber8"]
 		self.tags = [Tags.Chaos]
-		self.level = 0
+		self.level = 4
 		self.lucky13 = 0
 		self.targ_num = 8
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
@@ -198,7 +198,7 @@ class Crescendo(Upgrade):
 		self.name = "Crescendo"
 		self.asset = ["TcrsCustomModpack", "Icons", "crescendo3"] ##TODO Fix corners
 		self.tags = [Tags.Sorcery]
-		self.level = 0
+		self.level = 5
 		self.base = 1
 		self.finale = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
@@ -222,12 +222,12 @@ class Crescendo(Upgrade):
 				self.summon(Lamasu())
 				
 
-class PsionicBlast(Upgrade):
+class PsionicBlast(Upgrade): ##This could be an equipment instead, it's kind of awkward as a skill.
 	def on_init(self):
 		self.name = "Psionic Blast"
 		self.asset = ["TcrsCustomModpack", "Icons", "psionic_blast"]
 		self.tags = [Tags.Arcane]
-		self.level = 0
+		self.level = 4 
 		self.range = 5
 		self.counter = 0
 		self.description = "Every 3 turns while channeling any spell, cast your devour mind on a nearby viable target."
@@ -300,7 +300,7 @@ class Chiroptyvern(Upgrade):
 		self.name = "Chiroptivyern"
 		self.asset = ["TcrsCustomModpack", "Icons", "bat_dragon_icon"]
 		self.tags = [Tags.Dragon, Tags.Dark, Tags.Conjuration]
-		self.level = 0 ##Seems very strong, level 7? Increase required dark levels?
+		self.level = 7 ##Seems very strong, level 7? Increase required dark levels?
 		
 		self.minion_health = ChiroDragon().max_hp
 		self.minion_damage = ChiroDragon().spells[1].damage
@@ -335,7 +335,7 @@ class Condensation(Upgrade):
 		self.name = "Condensation"
 		self.tags = [Tags.Ice, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "condensation"]
-		self.level = 0 ##Strong with stormcaller, not amazingly OP on its own.
+		self.level = 6 ##Strong with stormcaller, not amazingly OP on its own.
 		
 		self.radius = 1
 		self.minion_health = 10
@@ -356,7 +356,7 @@ class Condensation(Upgrade):
 				self.summon(unit=unit, target=tile)
 
 
-class AngularGeometry(Upgrade):
+class AngularGeometry(Upgrade): ##TODO fix this bullshit, it needs work
 	def on_init(self):
 		self.name = "Sacred Geometry"
 		self.tags = [Tags.Holy, Tags.Enchantment]
@@ -419,8 +419,9 @@ class Discharge(Upgrade):
 	def on_init(self):
 		self.name = "Discharge"
 		self.tags = [Tags.Lightning]
-		self.level = 0
+		self.level = 5
 		self.asset = ["TcrsCustomModpack", "Icons", "discharge"]
+		
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.owner_triggers[EventOnUnitAdded] = self.on_enter_level
 		self.num_targets = 1
@@ -488,7 +489,7 @@ class Friction(Upgrade):
 	def on_init(self):
 		self.name = "Friction"
 		self.tags = [Tags.Fire, Tags.Translocation]
-		self.level = 0
+		self.level = 4
 		self.asset = ["TcrsCustomModpack", "Icons", "friction"]
 		self.duration = 8
 		self.description = ("Gain a stack of friction whenever you move. Gain two stacks for teleporting. Lose all stacks when you cast a fire spell." +
@@ -508,7 +509,7 @@ class PoisonousCopy(Upgrade):
 		self.name = "Poisonous Doubling"
 		self.tags = [Tags.Fire, Tags.Nature]
 		self.asset = ["TcrsCustomModpack", "Icons", "poisonous_copy"]
-		self.level = 0
+		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.copies = 0
 
@@ -544,13 +545,17 @@ class IcyVeins(Upgrade):
 	def on_init(self):
 		self.name = "Icy Veins"
 		self.tags = [Tags.Ice, Tags.Blood]
-		self.level = 0 #Extremely ridiculously powerful effect, test at level 7 for sure. Super cool imho Rebalance somehow.
+		self.level = 7 #Extremely ridiculously powerful effect, test at level 7 for sure. Super cool imho, Rebalance somehow.
 		self.asset = ["TcrsCustomModpack", "Icons", "icy_veins"]
 		self.global_triggers[EventOnDamaged] = self.on_damaged
 		self.iceblood = 0
 		#if isinstance(s, Spell)
 		
 	def on_damaged(self, evt):
+		print("Source Name:")
+		print(evt.source.name)
+		print("Source Owner")
+		print(evt.source.owner.name)
 		if evt.damage_type != Tags.Ice:
 			return
 		self.iceblood += evt.damage
@@ -628,7 +633,7 @@ class HolyMetalLantern(Upgrade):
 		self.name = "Puregleam Lantern"
 		self.tags = [Tags.Holy, Tags.Metallic]
 		self.asset = ["TcrsCustomModpack", "Icons", "puregleam_lantern"]
-		self.level = 0
+		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.damage = 1
 		self.duration = 5
@@ -636,8 +641,8 @@ class HolyMetalLantern(Upgrade):
 
 	def get_description(self):
 		return ("Whenever you cast a [holy] or [metallic] spell, gain puregleam with duration equal to the spell's level.\n"
-				"While you have the buff up to [{num_targets}:num_targets] enemy units in line of sight are either \n"
-			    "dealt [{damage}_holy:holy] and blinded for [{duration}_turns:duration], or dealt [{damage}_physical:physical] and stunned for 1 turn.").format(**self.fmt_dict())
+				"While you have the buff up to [{num_targets}:num_targets] enemy units in line of sight are either "
+				"dealt [{damage}_holy:holy] and blinded for [{duration}_turns:duration], or dealt [{damage}_physical:physical] and stunned for 1 turn.").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
 		if Tags.Holy in evt.spell.tags or Tags.Metallic in evt.spell.tags:
@@ -698,7 +703,7 @@ class NightsightLantern(Upgrade):
 		self.name = "Nightsight Lantern" #Darksight? 
 		self.tags = [Tags.Dark, Tags.Eye, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "nightsight_lantern"]
-		self.level = 0
+		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.global_triggers[EventOnDeath] = self.on_death
 
@@ -750,7 +755,7 @@ class ContractFromBelow(Upgrade):
 		self.tags = [Tags.Dark, Tags.Chaos]
 		self.asset = ["TcrsCustomModpack", "Icons", "contract_from_below"]
 		self.description =	("In each realm, after you summon 5 uniquely named demons, gain Demonic Contract.\n Demonic contract gives your [dark] and [chaos] spells quickcast," + "and deals 15 [holy] damage to you per [dark] or [chaos] spell cast. All other spells deal 3 damage to you.")
-		self.level = 0
+		self.level = 7 ##This is far weaker now that quickcast has been toned down. I can probably nerf the self damage.
 		self.damage = 15
 		self.demons = {}
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_added
@@ -783,7 +788,7 @@ class MageArmor(Upgrade):
 		self.name = "Enchanter's Armor"
 		self.tags = [Tags.Enchantment]
 		self.asset = ["TcrsCustomModpack", "Icons", "magearmor"] #Variation of Dwarven Chainmail by K.Hoops
-		self.level = 0
+		self.level = 5
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_added
 		self.duration = 10
 		self.description = ("Upon entering a realm, gain 25%  resistance to each damage type for each of your enchantment spell tags for [{duration}_turns:duration].\n" +
@@ -828,7 +833,7 @@ class Accelerator(Upgrade):
 		self.tags = [Tags.Enchantment]
 		self.asset = ["TcrsCustomModpack", "Icons", "accelerator"]
 		self.description = "Every 100 damage dealt with [enchantment] spells, grant yourself the Accelerator buff for 5 turns. The buff gives quickcast to your next enchantment spell."
-		self.level = 0
+		self.level = 6
 		self.global_triggers[EventOnDamaged] = self.on_damage
 
 		self.threshold = 100
@@ -857,7 +862,7 @@ class WeaverOfElements(Upgrade):
 		self.description = ("For every 3 [Fire], [Ice], or [Lightning] spells you cast, deal damage in a line between each point and the other two points.\n" +
 							"Deal [fire] damage if any of the spells had the [fire] tag, then repeat for [Ice] and [Lightning].\n"
 							"Does not hurt you. Does work with free spells.")
-		self.level = 0 ##Change this to every 3 spells cast, and make a triangle between the 3 points
+		self.level = 5 ##Change this to every 3 spells cast, and make a triangle between the 3 points
 		
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.damage = 5
@@ -896,7 +901,7 @@ class WeaverOfOccultism(Upgrade):
 		self.name = "Weave the Occult"
 		self.tags = [Tags.Arcane, Tags.Dark, Tags.Holy, Tags.Blood]
 		self.asset = ["TcrsCustomModpack", "Icons", "weaver_of_occult"]
-		self.level = 0
+		self.level = 6
 		
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.points = []
@@ -954,11 +959,11 @@ class WeaverOfMaterialism(Upgrade):
 		self.name = "Weave the Material"
 		self.tags = [Tags.Nature, Tags.Dragon, Tags.Metallic]
 		self.asset = ["TcrsCustomModpack", "Icons", "weaver_of_material"]
-		self.description = ("For every 3 spells you cast, summon a slime at the third spell's target." +
-							"The slime is a combination of the tags of all spells: if the [nature] tag was in any spell the slime gains poisonous attacks, then repeat "
-							"for [Dragon] and breath attacks, and [Metallic] and melee retaliation damage. Newly split slimes are normal green slimes."
+		self.description = ("For every 3 spells you cast, summon a slime at the third spell's target.\n" +
+							"The slime is a combination of the tags used: if the [nature] tag was in any spell the slime gains poisonous attacks, then repeat "
+							"for [Dragon] and a breath attack, and [Metallic] and melee retaliation damage. Newly split slimes are normal green slimes.\n"
 							"Does not work with free spells.").format(**self.fmt_dict())
-		self.level = 0 ##Change this to every 3 spells cast
+		self.level = 7 ##Change this to every 3 spells cast
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.points = []
 		self.spell_tags = []
@@ -1047,7 +1052,7 @@ class Scrapheap(Upgrade):
 		self.tags = [Tags.Metallic, Tags.Conjuration]
 		self.asset =  ["TcrsCustomModpack", "Icons", "scrapheap"]
 		self.description = "Each 10 turns summon a scrap golem. For each construct or metallic unit that died during those 10 turns, give it 7 health, or 4 damage."
-		self.level = 0
+		self.level = 5 ##Directly comparable to boneguard.
 		self.global_triggers[EventOnDeath] = self.on_death
 		self.scrap = 0
 		self.counter = 0
@@ -1079,13 +1084,13 @@ class Scrapheap(Upgrade):
 	def get_extra_examine_tooltips(self):
 		return [Golem()]
 
-class ArclightEagle(Upgrade):
+class ArclightEagle(Upgrade): ##Quickcast nerfed, does this get changed to 2 spells?
 	def on_init(self):
 		self.name = "Arclight Eagle" ##Obviously inspired by Arclight Phoenix
 		self.tags = [Tags.Lightning, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "arclight_eagle"]
 		self.description = "On any turn you cast at least 3 spells, one of which is [lightning], summon an eagle. The eagle inherits upgrades from your Flock of Eagles spell."
-		self.level = 0
+		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.spells_cast = 0
 		self.lightning = False
@@ -1146,7 +1151,7 @@ class Mathemagics(Upgrade):
 		self.name = "Mathemagics Class "
 		self.asset = ["TcrsCustomModpack", "Icons", "mathemagics"]
 		self.tags = [Tags.Sorcery, Tags.Enchantment]
-		self.level = 0
+		self.level = 7
 		self.damage = 13
 
 	def on_advance(self):
@@ -1163,17 +1168,17 @@ class Mathemagics(Upgrade):
 
 class QueenOfTorment(Upgrade):
 	def on_init(self):
-		self.name = "Queen of Torment" ##Based on Prince of Ruin, there's no "Torment" Tag, but it will be a placeholder name for poison arcane ice damage together.
+		self.name = "Queen of Torment" ##Based on Prince of Ruin. There's no "Torment" Tag, but it will be a placeholder name for poison arcane ice damage together.
 		self.tags = [Tags.Nature, Tags.Arcane, Tags.Ice]
 		self.asset = ["TcrsCustomModpack", "Icons", "queen_of_torment"]
-		self.level = 0
+		self.level = 5
 		self.duration = 2
 		self.global_triggers[EventOnDeath] = self.on_death #Ice -> Fear, Poison -> Freeze, Arcane -> Poison (Acidified? Could be more interesting)
 		self.radius = 5
 		
 	def get_description(self):
 		return ("When an enemy dies to [Ice] damage apply Fear to an enemy within 5 tiles."
-				" Repeat for [Poison] damage and Frozen, and [Arcane] damage and Poisoned plus Acidified.\n"
+				" Repeat for [Poison] damage with the Frozen debuff, and [Arcane] damage with Poisoned plus Acidified debuffs.\n"
 				"Fear lasts [{duration}_turns:duration]. Freeze lasts 2 extra turn, Poisoned lasts 4 extra turns, Acidify lasts forever.").format(**self.fmt_dict())
 
 	def on_death(self, evt):
@@ -1221,10 +1226,10 @@ class Cloudcover(Upgrade):
 		self.name = "Cloud Cover"
 		self.tags = [Tags.Enchantment]
 		self.asset = ["TcrsCustomModpack", "Icons", "cloudcover"]
-		self.level = 0 ##Tentative level 5-6 this is incredibly good with stormcaller, this is very average with everything else though.
+		self.level = 5 ##Tentative level 5-6 this is incredibly good with stormcaller, this is very average with everything else though.
 		self.description = "When you end your turn in a cloud, gain 75 resistance to that cloud's damage type for 1 turn. Applies to: Blizzards, Thunderstorms, Poison Clouds, and Fire Clouds."
 		self.duration = 1
-		self.cloud_dict = {BlizzardCloud:Tags.Ice, StormCloud:Tags.Lightning, PoisonCloud:Tags.Poison, FireCloud:Tags.Fire}
+		self.cloud_dict = {BlizzardCloud:Tags.Ice, StormCloud:Tags.Lightning, PoisonCloud:Tags.Poison, FireCloud:Tags.Fire} ##TODO add the rain cloud.
 
 	def on_advance(self):
 		cloud = self.owner.level.tiles[self.owner.x][self.owner.y].cloud
@@ -1239,7 +1244,7 @@ class Cloudcover(Upgrade):
 class EyeSpellTrigger(Upgrade):
 	def on_init(self):
 		self.name = "Eye of Providence"
-		self.level = 0
+		self.level = 5
 		self.tags = [Tags.Eye]
 		self.asset = ["TcrsCustomModpack", "Icons", "eye_of_providence"]
 		self.description = "When you cast a holy spell, advance your eye spell buffs by one turn."
@@ -1301,7 +1306,7 @@ class EyeBuffExtender(Upgrade): ##Dummied out, can't figure out how to get it go
 class Overheal(Upgrade):
 	def on_init(self):
 		self.name = "Overflowing Vitality"
-		self.level = 0
+		self.level = 6
 		self.tags = [Tags.Nature, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "overheal"]
 		self.global_triggers[EventOnHealed] = self.on_heal
@@ -1311,7 +1316,7 @@ class Overheal(Upgrade):
 
 	def get_description(self):
 		return ("Whenever a unit heals, gain Vitality stacks equal to the amount of missing life healed.\n When Vitality is greater than 75, "
-				"use 75 of it to summon a Giant Satyr.").format(**self.fmt_dict())
+				"consume 75 of it to summon a Giant Satyr.").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
 		return [SatyrGiant()]
@@ -1335,9 +1340,9 @@ class Overheal(Upgrade):
 class WalkTheOrb(Upgrade):
 	def on_init(self):
 		self.name = "Walk the Orb"
-		self.level = 0
+		self.level = 6
 		self.tags = [Tags.Orb]
-		self.description = ("When you use an orb spell to orb walk, do 50 damage to one random enemy for each different tag in orb spells you know."
+		self.description = ("When you use an orb spell to orb walk, do 50 damage to one random enemy for each different tag in orb spells you know.\n"
 							" E.g. converts [Ice] to [Ice] damage, but also [Metallic] to [Physical] damage, and [Blood] to [Dark] damage.").format(**self.fmt_dict())
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.tagconv = TagToDmgTagConvertor()
@@ -1416,7 +1421,7 @@ class RimeorbLantern(Upgrade):
 		self.name = "Rimeorb Lantern"
 		self.tags = [Tags.Ice, Tags.Orb, Tags.Enchantment]
 		self.asset = ["TcrsCustomModpack", "Icons", "rimeorb_lantern"]
-		self.level = 0 ##Aiming for level 4 or 5. Scales extremely poorly at present. Wouldn't mind a source of aura damage somewhere.
+		self.level = 4 ##Aiming for level 4 or 5. Scales extremely poorly at present. Wouldn't mind a source of aura damage somewhere.
 		self.radius = 6
 		self.aura_damage = 2
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
@@ -1482,7 +1487,7 @@ class ChaosScaleLantern(Upgrade):
 		self.name = "Riotscale Lantern"
 		self.tags = [Tags.Dragon, Tags.Chaos]
 		self.asset = ["TcrsCustomModpack", "Icons", "riotscale_lantern"]
-		self.level = 0
+		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.breath_damage = 8
 		self.range = 7
@@ -1490,7 +1495,7 @@ class ChaosScaleLantern(Upgrade):
 	def get_description(self):
 		return ("Whenever you cast a [Dragon] or [Chaos] spell, gain Riotscale Rage with duration equal to the spell's level. Dragon spells give 3 times their level.\n"
 				"The buff gives you a breath attack with a 3 turn cooldown. The breath attack has a range of 5 and deals 8 [Physical], [Fire], or [Lightning] damage randomly."
-				"Each turn the breath does not activate, and is off cooldown, it gains 1 range until it activates.").format(**self.fmt_dict())
+				" Each turn the breath does not activate, and is off cooldown, it gains 1 range until it activates.").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
 		if Tags.Dragon in evt.spell.tags or Tags.Chaos in evt.spell.tags:
@@ -1504,9 +1509,11 @@ class ChaosScaleLantern(Upgrade):
 class AuraReading(Upgrade):
 	def on_init(self):
 		self.name = "Aura Reading"
-		self.level = 0
+		self.level = 5
 		self.tags = [Tags.Arcane, Tags.Dark, Tags.Enchantment] ##TODO implement modifiable aura damage on inferno engines.
 		self.description = "Your Aura damage is increased by 2, even damage which is said to be fixed. When a unit's aura ends, it spawns a Purple Pachyderm for each 50 damage dealt by the aura."
+		self.asset = ["TcrsCustomModpack", "Icons", "aura_reading"]
+		
 		self.global_bonuses['aura_damage'] = 2
 		self.global_triggers[EventOnBuffRemove] = self.buff_removed
 		self.global_triggers[EventOnDeath] = self.on_death
@@ -1557,7 +1564,7 @@ class HindsightImmunity(Buff):
 class Hindsight(Upgrade):
 	def on_init(self):
 		self.name = "Hindsight"
-		self.level = 0
+		self.level = 4
 		self.tags = [Tags.Enchantment]
 		self.description = "When any negative status effect wears off, become immune to it for 20 turns."
 		self.owner_triggers[EventOnBuffRemove] = self.on_buff
@@ -1606,7 +1613,7 @@ class ChaosLord(Upgrade):
 	def on_init(self):
 		self.name = "Chaos Lord"
 		self.tags = [Tags.Chaos]
-		self.level = 0
+		self.level = 7 ##Needs some more buffs, level 7 is too weak.
 		
 		self.tag_bonuses[Tags.Chaos]['damage'] = 3
 		self.tag_bonuses[Tags.Chaos]['duration'] = 3
@@ -1617,7 +1624,7 @@ class Triskadecaphobia(Upgrade):
 	def on_init(self):
 		self.name = "Triskadecaphobia"
 		self.tags = [Tags.Dark, Tags.Translocation]
-		self.level = 0
+		self.level = 5
 
 		self.tiles = 0
 		self.owner_triggers[EventOnUnitAdded] = self.enter
@@ -1660,7 +1667,7 @@ class Triskadecaphobia(Upgrade):
 
 	def get_description(self):
 		return ("At the end of each turn, gain Phobia equal to the amount of tiles you've moved from your starting tile. "
-				"Diagonal movement adds 1.4 times as many tiles. Always rounded down to the nearest whole number.\n"
+				"Diagonal movement adds 1.4 times as many tiles. Always rounds down to the nearest whole number.\n"
 				"If you have more than 13 Phobia, apply Fear to all enemies for 1 turn. If your Phobia is exactly 13 you summon a ghost. Both results reset Phobia to 0.\n"
 				"Current Phobia: " + str(self.tiles))
 	
@@ -1779,6 +1786,28 @@ class Aposiopesis(Upgrade):
 		self.level = 0
 		self.tags = [Tags.Arcane]
 		self.description = "When you stop channeling a spell, perform Y actions for each X turns spent channeling."
+
+class TheRiddle(Upgrade):
+	def on_init(self):
+		self.name = "The Riddle"
+		self.level = 0
+		self.tags = [Tags.Arcane]
+		self.description = "Each turn where you have done at least 3 of these summon a horseman. Cast a spell for free, cast a spell while payings its costs, moved, and passed a turn."
+		self.owner_triggers[EventOnMoved] = self.on_move
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		self.advanced = False
+		self.passed = False
+		self.cast_free = False
+		self.cast_notfree = False
+
+
+class LightningReflexes(Upgrade):
+	def on_init(self):
+		self.name = "Lightning Reflexes"
+		self.level = 0
+		self.tags = [Tags.Lightning]
+		self.description = "You can cast 2 extra quick cast spells each turn."
+
 
 # class Matryoshka(Upgrade):
 # 	def on_init(self):
