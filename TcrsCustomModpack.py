@@ -20,85 +20,94 @@ cust_skills.construct_skills()
 #	print(a)
 #print("Testing")
 
-# def add_events():
-# 	Level.EventOnMakeFloor = namedtuple("EventOnMakeFloor", "x y")
-# add_events()
 
-# def make_floor_event(self, x, y, calc_glyph=True):
-# 		tile = self.tiles[x][y]
-# 		tile.can_walk = True
-# 		tile.can_see = True
-# 		tile.can_fly = True
-# 		tile.is_chasm = False
-# 		tile.name = "Floor"
-# 		tile.description = "A rough rocky floor"
+def add_events():
+	Level.EventOnMakeFloor = namedtuple("EventOnMakeFloor", "x y was_chasm was_wall")
+add_events()
 
-# 		if self.brush_tileset:
-# 			tile.tileset = self.brush_tileset
 
-# 		if calc_glyph:
-# 			tile.calc_glyph()
+def make_floor_event(self, x, y, calc_glyph=True):
+		tile = self.tiles[x][y]
+		was_chasm = False
+		was_wall = False
+		if tile.is_chasm:
+			was_chasm = True
+		if tile.is_wall():
+			was_wall = True
+		tile.can_walk = True
+		tile.can_see = True
+		tile.can_fly = True
+		tile.is_chasm = False
+		tile.name = "Floor"
+		tile.description = "A rough rocky floor"
 
-# 		self.clear_tile_sprite(tile)
+		if self.brush_tileset:
+			tile.tileset = self.brush_tileset
 
-# 		if self.tcod_map:
-# 			libtcod.map_set_properties(self.tcod_map, tile.x, tile.y, tile.can_see, tile.can_walk)
-			
-# 		self.event_manager.raise_event(EventOnMakeFloor(x, y))
+		if calc_glyph:
+			tile.calc_glyph()
 
-# def new_func():
-#     Level.make_floor = make_floor_event
-# new_func()
+		self.clear_tile_sprite(tile)
+
+		if self.tcod_map:
+			libtcod.map_set_properties(self.tcod_map, tile.x, tile.y, tile.can_see, tile.can_walk)
+		
+		
+		self.event_manager.raise_event(Level.EventOnMakeFloor(x, y , was_chasm, was_wall))
+
+def new_func():
+    Level.make_floor = make_floor_event
+new_func()
 
 #from RiftWizard2 import main_view
 
-import inspect #                                  |
-def get_RiftWizard(): #                           |
-   # Returns the RiftWizard.py module object      |
-   for f in inspect.stack()[::-1]: #              |
-       if "file 'RiftWizard2.py'" in str(f): #    |
-           return inspect.getmodule(f[0]) #       |
-	#                                             |
-   return inspect.getmodule(f[0]) #               |
-RiftWizard = get_RiftWizard() #   
+# import inspect #                                  |
+# def get_RiftWizard(): #                           |
+#    # Returns the RiftWizard.py module object      |
+#    for f in inspect.stack()[::-1]: #              |
+#        if "file 'RiftWizard2.py'" in str(f): #    |
+#            return inspect.getmodule(f[0]) #       |
+# 	#                                             |
+#    return inspect.getmodule(f[0]) #               |
+# RiftWizard = get_RiftWizard() #   
 
 
-def draw_cloud_mod(self, cloud, secondary=False):
-	print("testing")
-	if not cloud.asset_name:
-		return
+# def draw_cloud(self, cloud, secondary=False):
+# 	print("testing")
+# 	if not cloud.asset_name:
+# 		return
 
-	if type(cloud.asset_name) == list:
-		asset = filename
-	elif secondary:
-		filename = cloud.asset_name + '_2'
-	else:
-		filename = cloud.asset_name + '_1'
-		asset = "TEST" #Obviously fix this later
+# 	if type(cloud.asset_name) == list:
+# 		asset = filename
+# 	elif secondary:
+# 		filename = cloud.asset_name + '_2'
+# 	else:
+# 		filename = cloud.asset_name + '_1'
+# 		asset = "TEST" #Obviously fix this later
 
-	if type(asset) == String:
-		asset = ['tiles', 'clouds', filename]
-	elif type(asset) == list:
-		asset = filename
+# 	if type(asset) == String:
+# 		asset = ['tiles', 'clouds', filename]
+# 	elif type(asset) == list:
+# 		asset = filename
 
-	image = get_image(asset)
+# 	image = get_image(asset)
 
-	num_frames = image.get_width() // sprite_size
-	cur_frame = (cloud_frame_clock // sub_frames[anim_idle]) % num_frames
+# 	num_frames = image.get_width() // sprite_size
+# 	cur_frame = (cloud_frame_clock // sub_frames[anim_idle]) % num_frames
 
-	subarea = (sprite_size * cur_frame, 0, sprite_size, sprite_size)
+# 	subarea = (sprite_size * cur_frame, 0, sprite_size, sprite_size)
 
-	x = cloud.x * sprite_size
-	y = cloud.y * sprite_size
+# 	x = cloud.x * sprite_size
+# 	y = cloud.y * sprite_size
 
-	self.level_display.blit(image, (x, y), subarea)
+# 	self.level_display.blit(image, (x, y), subarea)
 
 
-pygameview_draw_cloud = RiftWizard.PyGameView.draw_cloud
-def pygameview_draw_cloud(self, *args, **kwargs):
-	pygameview_draw_cloud(self, *args, **kwargs)
-	self.draw_cloud = self.draw_cloud_mod
-RiftWizard.PyGameView.draw_cloud = draw_cloud_mod
+#pygameview_draw_cloud = RiftWizard.PyGameView.draw_cloud
+#def pygameview_draw_cloud(self, *args, **kwargs):
+#	pygameview_draw_cloud(self, *args, **kwargs)
+#	self.draw_cloud = self.draw_cloud_
+#RiftWizard.PyGameView.draw_cloud = draw_cloud
 
 # import inspect
 # from RiftWizard2 import main_view

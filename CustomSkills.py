@@ -23,7 +23,8 @@ class Librarian(Upgrade):
 		self.tags = [Tags.Word, Tags.Sorcery]
 		self.asset = ["TcrsCustomModpack", "Icons", "librarian"]
 		self.level = 7
-		self.description = "Whenever you cast a level 6 or greater spell, summon a number of living scrolls of that spell's tags equal to the level of the spell.\nCan summon: [Fire], [Ice], [Lightning], [Nature], [Arcane], [Dark], [Holy], [Metallic], [Chaos], and [Blood] scrolls."
+		self.description = ("Whenever you cast a level 6 or greater spell, summon a number of living scrolls of that spell's tags equal to the level of the spell." +
+							"\nCan summon: [Fire], [Ice], [Lightning], [Nature], [Arcane], [Dark], [Holy], [Metallic], [Chaos], and [Blood] scrolls.")
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.scrolls = ScrollConvertor()
 		self.scrolls[Tags.Metallic] = MetalShard,LivingMetalScroll()
@@ -102,7 +103,7 @@ class FromAshes(Upgrade):
 		self.name = "From the Ashes"
 		self.tags = [Tags.Fire, Tags.Holy, Tags.Conjuration]
 		self.level = 5
-		self.asset = ["TcrsCustomModpack", "Icons", "Testshape3"] ##TODO fix
+		self.asset = ["TcrsCustomModpack", "Icons", "Testshape3"] ##TODO fix corners, also probably give it a real name.
 		
 		self.num_summons = 1
 		self.minion_health = Phoenix().max_hp
@@ -246,7 +247,7 @@ class PsionicBlast(Upgrade): ##This could be an equipment instead, it's kind of 
 	def get_targets(self):
 		potential_targets = self.owner.level.get_units_in_ball(self.owner, self.get_stat('range'))
 		potential_targets = [t for t in potential_targets if self.can_target(t)]
-		if potential_targets != []: ##TODO Fix this stupid code
+		if potential_targets != []: ##TODO Fix this stupid code - Note I can no longer tell why I thought this was stupid.
 			random.shuffle(potential_targets)
 			return potential_targets[0]
 		return False
@@ -298,7 +299,7 @@ def ChiroDragon():
 class Chiroptyvern(Upgrade):
 	def on_init(self):
 		self.name = "Chiroptivyern"
-		self.asset = ["TcrsCustomModpack", "Icons", "bat_dragon_icon"]
+		self.asset = ["TcrsCustomModpack", "Icons", "chiroptywvern"]
 		self.tags = [Tags.Dragon, Tags.Dark, Tags.Conjuration]
 		self.level = 7 ##Seems very strong, level 7? Increase required dark levels?
 		
@@ -341,7 +342,7 @@ class Condensation(Upgrade):
 		self.minion_health = 10
 		self.minion_damage = 3
 		self.minion_range = 3
-		self.description = "Each turn, convert blizzard clouds in neighbouring tiles into ice slimes."
+		self.description = "Each turn, convert blizzard clouds or rain clouds in neighbouring tiles into ice slimes."
 		
 	def get_extra_examine_tooltips(self):
 		return [IceSlime()]
@@ -349,7 +350,7 @@ class Condensation(Upgrade):
 	def on_advance(self):
 		for p in self.owner.level.get_points_in_rect(self.owner.x - self.radius, self.owner.y - self.radius, self.owner.x + self.radius, self.owner.y + self.radius):
 			tile = self.owner.level.tiles[p.x][p.y]
-			if isinstance(tile.cloud, BlizzardCloud):
+			if isinstance(tile.cloud, BlizzardCloud) or isinstance(tile.cloud, RainCloud):
 				tile.cloud.kill()
 				unit = IceSlime()
 				apply_minion_bonuses(self, unit)
@@ -491,9 +492,9 @@ class Friction(Upgrade):
 		self.tags = [Tags.Fire, Tags.Translocation]
 		self.level = 4
 		self.asset = ["TcrsCustomModpack", "Icons", "friction"]
-		self.duration = 8
+		self.duration = 4
 		self.description = ("Gain a stack of friction whenever you move. Gain two stacks for teleporting. Lose all stacks when you cast a fire spell." +
-							"Each stack of friction grants fire spells 3 damage, 0.25 radius and 0.25 range. Lasts [{duration}_turns:duration].").format(**self.fmt_dict())
+							"Each stack of friction grants fire spells 5 damage, 0.5 radius and 0.5 range. Lasts [{duration}_turns:duration].").format(**self.fmt_dict())
 		self.owner_triggers[EventOnMoved] = self.on_moved
 
 	def on_moved(self, evt):
@@ -545,7 +546,7 @@ class IcyVeins(Upgrade):
 	def on_init(self):
 		self.name = "Icy Veins"
 		self.tags = [Tags.Ice, Tags.Blood]
-		self.level = 7 #Extremely ridiculously powerful effect, test at level 7 for sure. Super cool imho, Rebalance somehow.
+		self.level = 7 #Extremely ridiculously powerful effect, test at level 7 for sure. Super cool imho, Rebalance somehow. Perhaps only allied units? Then reduce threshold?
 		self.asset = ["TcrsCustomModpack", "Icons", "icy_veins"]
 		self.global_triggers[EventOnDamaged] = self.on_damaged
 		self.iceblood = 0
@@ -747,16 +748,16 @@ class ContractFromBuff(Buff):
 		if Tags.Dark in evt.spell.tags or Tags.Chaos in evt.spell.tags:
 			self.owner.deal_damage(self.skill.get_stat('damage'), Tags.Holy, self)
 		else:
-			self.owner.deal_damage(3, Tags.Holy, self)
+			self.owner.deal_damage(2, Tags.Holy, self)
 
 class ContractFromBelow(Upgrade):
 	def on_init(self):
 		self.name = "Contract from Below"
 		self.tags = [Tags.Dark, Tags.Chaos]
 		self.asset = ["TcrsCustomModpack", "Icons", "contract_from_below"]
-		self.description =	("In each realm, after you summon 5 uniquely named demons, gain Demonic Contract.\n Demonic contract gives your [dark] and [chaos] spells quickcast," + "and deals 15 [holy] damage to you per [dark] or [chaos] spell cast. All other spells deal 3 damage to you.")
+		self.description =	("In each realm, after you summon 5 uniquely named demons, gain Demonic Contract.\n Demonic contract gives your [dark] and [chaos] spells quickcast," + "and deals 10 [holy] damage to you per [dark] or [chaos] spell cast. All other spells deal 2 damage to you.")
 		self.level = 7 ##This is far weaker now that quickcast has been toned down. I can probably nerf the self damage.
-		self.damage = 15
+		self.damage = 10
 		self.demons = {}
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_added
 	
@@ -1192,16 +1193,16 @@ class QueenOfTorment(Upgrade):
 		candidates = [u for u in self.owner.level.get_units_in_ball(evt.unit, self.radius) if are_hostile(self.owner, u)]
 		if candidates:
 			target = random.choice(candidates)
+			duration = self.get_stat('duration')
 			if evt.damage_event.damage_type == Tags.Ice:
 				buff = Fear()
-				duration = self.get_stat('duration')
 			elif evt.damage_event.damage_type == Tags.Poison:
 				buff = FrozenBuff()
-				duration = self.duration + 1
-			elif evt.damage_event.damage_type == Tags.Arcane: ##I think this was escaping without finding a damage type, changed to else
+				duration += 2
+			elif evt.damage_event.damage_type == Tags.Arcane: ##I think this was escaping without finding a damage type, changed to else?
 				target.apply_buff(Acidified())
 				buff = Poison()
-				duration = self.duration + 2
+				duration += 4
 			target.apply_buff(buff, duration)
 		yield
 
@@ -1226,10 +1227,10 @@ class Cloudcover(Upgrade):
 		self.name = "Cloud Cover"
 		self.tags = [Tags.Enchantment]
 		self.asset = ["TcrsCustomModpack", "Icons", "cloudcover"]
-		self.level = 5 ##Tentative level 5-6 this is incredibly good with stormcaller, this is very average with everything else though.
+		self.level = 5 ##Tentative level 5-6 this is incredibly good with stormcaller, this is very okay with everything else though.
 		self.description = "When you end your turn in a cloud, gain 75 resistance to that cloud's damage type for 1 turn. Applies to: Blizzards, Thunderstorms, Poison Clouds, and Fire Clouds."
 		self.duration = 1
-		self.cloud_dict = {BlizzardCloud:Tags.Ice, StormCloud:Tags.Lightning, PoisonCloud:Tags.Poison, FireCloud:Tags.Fire} ##TODO add the rain cloud.
+		self.cloud_dict = {BlizzardCloud:Tags.Ice, StormCloud:Tags.Lightning, PoisonCloud:Tags.Poison, FireCloud:Tags.Fire, RainCloud:Tags.Ice}
 
 	def on_advance(self):
 		cloud = self.owner.level.tiles[self.owner.x][self.owner.y].cloud
@@ -1337,7 +1338,7 @@ class Overheal(Upgrade):
 			self.summon(unit)
 			self.total -= 75
 
-class WalkTheOrb(Upgrade):
+class WalkTheOrb(Upgrade): ##This might be a better equipment than skill. Very very niche.
 	def on_init(self):
 		self.name = "Walk the Orb"
 		self.level = 6
@@ -1478,23 +1479,24 @@ class ChaosScaleBuff(Buff):
 		breath = self.owner.get_or_make_spell(RiotscaleBreath)
 		breath.range = self.range
 		breath.source = self
+		breath.damage = self.breath_damage
 		self.owner.level.act_cast(self.owner, breath, unit.x, unit.y, pay_costs=False)
 		self.range = 5
 		self.cooldown = 3
 		
-class ChaosScaleLantern(Upgrade):
+class ChaosScaleLantern(Upgrade): ##TODO This might be teaching you spells based on last cast, see if it's this or duergar helm.
 	def on_init(self):
 		self.name = "Riotscale Lantern"
 		self.tags = [Tags.Dragon, Tags.Chaos]
 		self.asset = ["TcrsCustomModpack", "Icons", "riotscale_lantern"]
 		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
-		self.breath_damage = 8
+		self.breath_damage = 15
 		self.range = 7
 
 	def get_description(self):
 		return ("Whenever you cast a [Dragon] or [Chaos] spell, gain Riotscale Rage with duration equal to the spell's level. Dragon spells give 3 times their level.\n"
-				"The buff gives you a breath attack with a 3 turn cooldown. The breath attack has a range of 5 and deals 8 [Physical], [Fire], or [Lightning] damage randomly."
+				"The buff gives you a breath attack with a 3 turn cooldown. The breath attack has a range of 5 and deals 15 [Physical], [Fire], or [Lightning] damage randomly."
 				" Each turn the breath does not activate, and is off cooldown, it gains 1 range until it activates.").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
@@ -1542,6 +1544,14 @@ class AuraReading(Upgrade):
 			apply_minion_bonuses(self, unit)
 			self.owner.level.summon(owner=self.owner, unit=unit, target=self.owner)
 
+	## "When 100 damage is dealt by any unit's aura, grant one random ally an aura dealing the same damage as their first spell, or arcane damage if that spell deals no
+	## damage, for 15 turns." INCREDIBLY hard to implement with how damage sources work, abandon all hope ye who enter here. At best I can check if the source uses aura damage?
+	#self.global_triggers[EventOnDamaged] = self.on_damage
+	#def on_damage(self, evt):
+	#	print(evt.source)
+	#	if not isinstance(evt.source, DamageAuraBuff):
+	#		return
+	#	print("AURA FOUND")
 
 class HindsightImmunity(Buff):
 	def __init__(self, buff):
@@ -1566,7 +1576,9 @@ class Hindsight(Upgrade):
 		self.name = "Hindsight"
 		self.level = 4
 		self.tags = [Tags.Enchantment]
-		self.description = "When any negative status effect wears off, become immune to it for 20 turns."
+		self.asset = ["TcrsCustomModpack", "Icons", "hindsight"]
+
+		self.description = "When any negative status effect wears off, become immune to it for 20 turns." ##This is very very long, should almost certainly be decreased.
 		self.owner_triggers[EventOnBuffRemove] = self.on_buff
 		self.duration = 20
 
@@ -1576,14 +1588,6 @@ class Hindsight(Upgrade):
 		duration = self.get_stat('duration')
 		self.owner.apply_buff(HindsightImmunity(evt.buff), duration)
 
-	## "When 100 damage is dealt by any unit's aura, grant one random ally an aura dealing the same damage as their first spell, or arcane damage if that spell deals no
-	## damage, for 15 turns." INCREDIBLY hard to implement with how damage sources work, abandon all hope ye who enter here. At best I can check if the source uses aura damage?
-	#self.global_triggers[EventOnDamaged] = self.on_damage
-	#def on_damage(self, evt):
-	#	print(evt.source)
-	#	if not isinstance(evt.source, DamageAuraBuff):
-	#		return
-	#	print("AURA FOUND")
 
 class PleonasmFaker(Spell):
 	def on_init(self):
@@ -1597,6 +1601,7 @@ class Pleonasm(Upgrade):
 		self.name = "Pleonasm"
 		self.level = 0
 		self.tags = [Tags.Sorcery]
+		self.asset = ["TcrsCustomModpack", "Icons", "pleonasm"]
 		self.description = "When you cast any spell, your on-cast effects trigger again. This does not recast the spell itself."
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		
@@ -1611,20 +1616,23 @@ class Pleonasm(Upgrade):
 		
 class ChaosLord(Upgrade):
 	def on_init(self):
-		self.name = "Chaos Lord"
+		self.name = "Baron of Chaos"
 		self.tags = [Tags.Chaos]
 		self.level = 7 ##Needs some more buffs, level 7 is too weak.
 		
 		self.tag_bonuses[Tags.Chaos]['damage'] = 3
 		self.tag_bonuses[Tags.Chaos]['duration'] = 3
-		self.tag_bonuses[Tags.Blood]['minion_duration'] = 3
-		self.tag_bonuses[Tags.Blood]['minion_damage'] = 3
-		
+		self.tag_bonuses[Tags.Chaos]['minion_duration'] = 3
+		self.tag_bonuses[Tags.Chaos]['minion_damage'] = 3
+		self.tag_bonuses[Tags.Chaos]['range'] = 3
+		self.tag_bonuses[Tags.Chaos]['minion_range'] = 3
+
 class Triskadecaphobia(Upgrade):
 	def on_init(self):
 		self.name = "Triskadecaphobia"
 		self.tags = [Tags.Dark, Tags.Translocation]
 		self.level = 5
+		self.asset = ["TcrsCustomModpack", "Icons", "triskadekaphobia"]
 
 		self.tiles = 0
 		self.owner_triggers[EventOnUnitAdded] = self.enter
@@ -1652,7 +1660,7 @@ class Triskadecaphobia(Upgrade):
 		self.lasty = self.owner.y
 		self.tiles = round(self.tiles, 1)
 		if math.floor(self.tiles) == 13:
-			unit = Ghost()
+			unit = DeathGhost() ##Make this a fearface?
 			apply_minion_bonuses(self, unit)
 			unit.turns_to_death = 6
 			self.summon(unit)
@@ -1671,7 +1679,94 @@ class Triskadecaphobia(Upgrade):
 				"If you have more than 13 Phobia, apply Fear to all enemies for 1 turn. If your Phobia is exactly 13 you summon a ghost. Both results reset Phobia to 0.\n"
 				"Current Phobia: " + str(self.tiles))
 	
+	def get_extra_examine_tooltips(self):
+		return [DeathGhost()]
 
+def VoidWyrm():
+	unit = Unit()
+	unit.name = "Void Wyrm"
+	unit.asset = ["TcrsCustomModpack", "Units", "wyrm_void"]
+	unit.max_hp = 75
+
+	unit.spells.append(VoidBreath())
+	unit.spells.append(SimpleMeleeAttack(14, trample=True))
+
+	unit.tags = [Tags.Arcane, Tags.Dragon, Tags.Living]
+	unit.resists[Tags.Arcane] = 100
+	
+	unit.buffs.append(RegenBuff(8))
+	unit.burrowing = True
+	return unit
+
+def GoldWyrm():
+	unit = Unit()
+	unit.name = "Gold Wyrm"
+	unit.asset = ["TcrsCustomModpack", "Units", "wyrm_gold"]
+	unit.max_hp = 75
+
+	unit.spells.append(HolyBreath())
+	unit.spells.append(SimpleMeleeAttack(14, trample=True))
+
+	unit.tags = [Tags.Holy, Tags.Dragon, Tags.Living]
+	unit.resists[Tags.Holy] = 100
+	
+	unit.buffs.append(RegenBuff(8))
+	unit.burrowing = True
+	return unit
+
+class VoidCaller(Upgrade):
+	def on_init(self):
+		self.name = "Puredrake Voidcaller"
+		self.tags = [Tags.Arcane, Tags.Holy, Tags.Dragon]
+		self.level = 0 ##This is pretty strong at present. Doesn't seem too powerful with corruption effects like mordred's void tango.
+		self.asset = ["TcrsCustomModpack", "Icons", "puredrake"]
+
+		self.global_triggers[Level.EventOnMakeFloor] = self.on_floor
+		self.global_triggers[EventOnDamaged] = self.on_damage
+		self.wall_count = 0
+		self.counter = 0
+		
+	def get_extra_examine_tooltips(self):
+		return [VoidWyrm(), GoldWyrm()]
+
+	def get_description(self):
+		return ("For every 15 wall tiles turned into floor tiles, summon a Void Wyrm. For every 200 damage dealt by Arcane Minions, summon a Gold Wyrm.\n"
+				"Walls Destroyed: %d\nDamage dealt: %d\n" % (self.wall_count, self.counter) )
+
+	def on_floor(self, evt):
+		if evt.was_wall:
+			self.wall_count += 1
+			
+		if self.wall_count >= 15:
+			unit = VoidWyrm()
+			apply_minion_bonuses(self, unit)
+			self.owner.level.summon(self.owner, unit, Point(evt.x, evt.y))
+			self.wall_count -= 15
+
+	def on_damage(self, evt):
+		print(evt.source)
+		print(evt.source.name)
+		if not evt.source:
+			return
+		if not evt.source.owner:
+			return
+		if not hasattr(evt.source, 'tags'):
+			return
+
+		is_tagged_summon = False
+		if evt.source.owner:
+			if evt.source.owner.source:
+				if hasattr(evt.source.owner.source, 'tags'):
+					if Tags.Arcane in evt.source.owner.source.tags:
+						is_tagged_summon = True
+
+		if is_tagged_summon:
+			self.counter += evt.damage
+			while self.counter > 200:
+				unit = GoldWyrm()
+				apply_minion_bonuses(self, unit)
+				self.summon(unit)
+				self.counter -= 200
 
 class TheFirstSeal(Upgrade):
 	def on_init(self):
@@ -1846,6 +1941,6 @@ def construct_skills():
 	skillcon = [FromAshes, Lucky13, PsionicBlast, Crescendo, Librarian, BoneShaping, Chiroptyvern, Condensation, AngularGeometry, Discharge, PoisonousCopy, 
 				IcyVeins, HolyMetalLantern, NightsightLantern, ContractFromBelow, MageArmor, Friction, Accelerator, ArclightEagle, Scrapheap, WeaverOfElements,
 				WeaverOfOccultism, WeaverOfMaterialism, Mathemagics, QueenOfTorment, Cloudcover, WalkTheOrb, EyeSpellTrigger, Overheal, RimeorbLantern,
-				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia]
+				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, ChaosLord]
 	for s in skillcon:
 		Upgrades.skill_constructors.extend([s])

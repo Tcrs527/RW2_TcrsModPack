@@ -20,7 +20,7 @@ from mods.TcrsCustomModpack.SharedClasses import *
 
 print("Custom Spells Loaded")
 
-##TODO ICONS: cloudwalk, hp%dist, total annihilation, unstable spell storm, fix chiropteran, triskadekaphobia, pleonasm, hindsight, walk the orb
+##TODO Icons for chiropteran, triskadekaphobia, pleonasm, hindsight, walk the orb, Fix Flywheel's one missing pixel
 
 ##TODO Use raise_elemental (CommonContent.py) to do something cool.
 
@@ -160,7 +160,7 @@ class SummonArmor(Spell):
 class Improvise(Spell):
 	def on_init(self):
 		self.name = "Improvise"
-		self.asset = ["TcrsCustomModpack", "Icons", "improvise"] ##TODO Fix this sprite, it only has 1 frame, it's not ugly at all
+		self.asset = ["TcrsCustomModpack", "Icons", "improvise"]
 		self.tags = [Tags.Chaos, Tags.Sorcery, Tags.Conjuration]
 		self.level = 1
 		
@@ -620,7 +620,7 @@ class Rockfall(Spell):
 		self.name = "Rockfall"
 		self.asset = ["TcrsCustomModpack", "Icons", "rockfall"]
 		self.tags = [Tags.Nature, Tags.Sorcery]
-		self.level = 4 ##TODO Set level - probably a level 4 or 5 spell? It should be low-ish impact with many charges
+		self.level = 4 ## Probably a level 4 or 5 spell? It should be low-ish impact with many charges
 		
 		self.range = 7
 		self.max_charges = 15
@@ -659,7 +659,6 @@ class Rockfall(Spell):
 			for _ in self.caster.level.act_cast(self.caster, sentinel, x, y, pay_costs=False, queue=False):
 				pass
 		yield
-		
 
 	def get_description(self):
 		mod_radius = self.get_stat('radius')
@@ -699,8 +698,8 @@ class Icebeam(Spell):
 		self.melee = True ##Revert if I can figure out this stupid spell.
 		self.cast_on_walls = True
 		self.can_target_self = False
-		self.damage = 40
-		self.max_charges = 5
+		self.damage = 45
+		self.max_charges = 6
 		self.total_damage = 0
 
 		self.upgrades['knight'] = (1, 4, "Storm Beam", "Each 180 damage dealt by the beam summons a storm knight.")
@@ -711,6 +710,9 @@ class Icebeam(Spell):
 	def get_description(self):
 		return ("Deals [{damage}_ice:ice] damage in a straight beam. The beam pierces walls and continues until the end of the level.\n"
 			   "Debuff yourself for 3 turns or until you cast a [fire] spell. If you cast another [ice] spell with the debuff, freeze for 3 turns.").format(**self.fmt_dict())
+
+	def get_extra_examine_tooltips(self): 
+		return [self.spell_upgrades[0], StormKnight(), self.spell_upgrades[1], self.spell_upgrades[2], FairyIce()]
 
 	def cast(self,x,y):
 		if self.caster.has_buff(IcebeamDebuff):
@@ -760,22 +762,26 @@ class Icebeam(Spell):
 			return
 		finalx = x
 		finaly = y
-		while finalx > 0 and finalx < size and finaly > 0 and finaly < size:
+		while finalx >= 0 and finalx <= size and finaly >= 0 and finaly <= size: ##TODO Ensure this works on the edge of the map
 			finalx -= run
 			finaly -= rise
-			
-		if finalx > size:
-		 	finalx = size - 1
+
+		if finalx > size: ##Problem has something to do with the final calculation on the edges. Notably different at the top left from bottom right.
+			finalx = size ##I think there's a problem here when you start one single tile away from the edge.
+
 		if finaly > size:
-			finaly = size - 1
+			finaly = size
+
 		if finalx < 0:
 			finalx = 0
+
 		if finaly < 0:
 		 	finaly = 0
 
+		target = Point(finalx,finaly)
+
 		#print('ice beam debug')
 		#print(str(self.caster.x) + ":" + str(self.caster.y) + " - " + str(finalx) + ":" + str(finaly))
-		target = Point(finalx,finaly)
 		#points = self.caster.level.get_points_in_line(self.caster, target)
 		#for p in Bolt(self.caster.level, start, target, find_clear=False):
 		#	if self.caster.level.is_point_in_bounds(p):
@@ -978,7 +984,7 @@ class EnchantingCross(Spell):
 					yield Point(x-i, y+i)
 					yield Point(x+i, y+i)
 
-	def cast_instant(self, x, y):
+	def cast_instant(self, x, y): ##Exclude level 3 spells that buff allies? Suspend mortality and my own steel fangs / icy path. Icy path will definitely cause problems.
 		spells = [s for s in self.caster.spells if Tags.Enchantment in s.tags and not s.name == "Enchanting Cross"]
 		targ_spells = []
 		self_spells = []
@@ -1096,7 +1102,6 @@ class IcepathBuff(Buff):
 		self.buff_type = BUFF_TYPE_BLESS
 		self.color = Tags.Ice.color
 		self.stack_type = STACK_REPLACE
-		self.stationary = True
 		self.resists[Tags.Ice] = 100
 		self.index = 0
 		self.owner_triggers[EventOnMoved] = self.on_move
@@ -1147,7 +1152,7 @@ class IcepathBuff(Buff):
 			self.points.insert(0,point)
 		self.index += 1
 
-class Icepath(Spell): ##TODO make this end prematurely if you get teleported, it's definitely going to cause issues.
+class Icepath(Spell):
 	def on_init(self):
 		self.name = "Icy Path"
 		self.level = 3 ##Level 3 seems reasonable. Maybe 2? It's very efficient against melee units and ice damage and not too amazing against all other things
@@ -1155,7 +1160,7 @@ class Icepath(Spell): ##TODO make this end prematurely if you get teleported, it
 		self.asset = ["TcrsCustomModpack", "Icons", "icepath"]
 		self.description = ("Target a point to create a path for your wizard to automatically move towards, one tile per turn. Can cross chasms, cannot displace units.\n"
 							"Become immune to [ice] during the effect. Target another tile to change your destination.\n"
-							"Casting this spell doesn't end your turn. The spell ends if you teleport.").format(**self.fmt_dict())
+							"Casting this spell doesn't end your turn. The buff ends if you teleport.").format(**self.fmt_dict())
 		self.range = 10
 		self.max_charges = 15
 		self.quick_cast = 1
@@ -1212,7 +1217,7 @@ class ScrollBreath(BreathWeapon):
 		scroll = self.make_scrolls(tag)
 		unit = self.caster.level.get_unit_at(x, y)
 		if unit:
-			self.caster.level.deal_damage(x, y, self.damage, tag, self)
+			self.caster.level.deal_damage(x, y, self.damage, tag, self) ##Some sort of error involving this. Maybe it killed a target and tried to summon a scroll also?
 		else:
 			self.summon(scroll, Point(x, y))
 			
@@ -1365,6 +1370,8 @@ class GrotesqueBuff(Buff):
 		self.resists[Tags.Fire] = 75
 		self.resists[Tags.Ice] = 100
 		self.resists[Tags.Lightning] = 100
+		self.buff_type = BUFF_TYPE_CURSE
+		self.stack_type = STACK_REPLACE
 		self.asset = ['status', 'stoned']
 	
 	def on_unapplied(self): ##Should check turns remaining if there are cleansing effects?
@@ -1389,30 +1396,32 @@ class Grotesquify(Spell):
 	def on_init(self):
 		self.name = "Statuesque Curse"
 		self.tags = [Tags.Enchantment, Tags.Metallic]
-		self.level = 2
-		#Tentative level 3 enchantment. Compare any enchantment which deals 10 damage per second. It doesn't scale, could be a level 2? Give it damage? Weak spell, but cool.
+		self.level = 2 ##Adding allied interactions to make this more interesting
 		self.asset = ["TcrsCustomModpack", "Icons", "slow_petrify"]
-		## TODO Test over chasms
-		self.max_charges = 20 ##Honestly could have many charges, it's quite weak. Compare death chill, lightning spire, or even mercurize.
-		self.range = 6
+		
+		self.max_charges = 20
+		self.range = 8
 		self.can_target_empty = False
 		
-		self.upgrades['gargoyle'] = (1, 3, "Grotesquery", "Instead of crumbling the statue revives as a gargoyle, or if it had more than 100 max hp, as a Mega Gargoyle")
+		self.upgrades['gargoyle'] = (1, 3, "Grotesquery", "Enemies now also become a Gargoyle, or if it had more than 100 max hp, as a Mega Gargoyle")
 		self.upgrades['group'] = (1, 5, "Connection", "Curses a group of connected enemies.")
 		self.upgrades['eyes'] = (1, 2, "Watching Ornaments", "The crumbling statue casts Eye of Fire, Lightning, or Ice randomly.") ##Kinda bizarre, but weird eye synergies fun
 
 	def get_description(self):
-		return ("Curse a unit to slowly petrify into a crumbling gargoyle statue, granting the target petrification resistances. \n"
-				"The curse lasts for 1 turn for each 10 max hp the target has. "
-				"The statue then crumbles after 10 turns.").format(**self.fmt_dict())
+		return ("Curse a unit to slowly petrify, granting the target petrification resistances. Allies become Gargoyles and enemies become Crumbling Statues when the curse ends.\n"
+				"The curse lasts for 1 turn for each 10 max hp the target has. If the buff is removed early, the effects happen instantly."
+				"Does not affect constructs.").format(**self.fmt_dict())
 	
+	##TODO check to see if this works on bosses, it'd would probably kill mordred in two turns lol
 	def get_extra_examine_tooltips(self):
-		return [GrotesqueStatue(), self.spell_upgrades[0], Gargoyle(), MegaGargoyle(), self.spell_upgrades[1], self.spell_upgrades[2]]
+		return [Gargoyle(), GrotesqueStatue(), self.spell_upgrades[0], MegaGargoyle(), MegaGargoyleStatue(), self.spell_upgrades[1], self.spell_upgrades[2]]
 
 	def cast_instant(self, x, y):
 		tiles = self.get_impacted_tiles(x,y)
 		for t in tiles:
 			unit = self.caster.level.get_unit_at(t.x, t.y)
+			if Tags.Construct in unit.tags:
+				return
 			duration = math.ceil(unit.max_hp / 10)
 			if duration > 0:
 				unit.apply_buff(GrotesqueBuff(self),duration)
@@ -1423,9 +1432,9 @@ class Grotesquify(Spell):
 		p = Point(x, y)
 		u = self.owner.level.get_unit_at(x, y)
 
-		if self.get_stat('gargoyle'):
-			if u.max_hp > 100:
-				unit = GargoyleStatue()
+		if self.get_stat('gargoyle') or not are_hostile(u, self.owner):
+			if u.max_hp < 100:
+				unit = Gargoyle()
 			else:
 				unit = MegaGargoyle()
 		else:
@@ -1754,7 +1763,7 @@ class Amalgamate(Spell):
 
 	def get_description(self):
 		return ("Amalgamates a connected group of allied [Living], or [Nature] units, killing them and spawning an Amalgamation at the target location.\n"
-				"The Amalgamation has the combined max hp of all units, their tags, flying if used on a chasm, regens 5 hp per turn, and learns their spells. "
+				"The Amalgamation has the combined max hp of all units, their tags, regens 5 hp per turn, and learns their spells. "
 				"Any spell that is learned more than once has its damage combined.").format(**self.fmt_dict())
 
 	def get_impacted_tiles(self, x, y):
@@ -2160,9 +2169,9 @@ class CallBerserker(Spell):
 	def get_description(self):
 		return ("Summon a berserker, a crazed [demon] which is permanently berserk.\n"
 				"The Berserker has [{minion_health}_HP:minion_health] and deals [{minion_damage}_physical:physical] damage with its attacks.\n"
-				"The Berserker has both a charging attack with 8 range and a melee attack." ##TODO update tooltip to reflect minion_range
-				"The Berserker will continue fighting after the realm is cleared.").format(**self.fmt_dict())
-
+				"The Berserker has both a charging attack with a range of [{minion_range}_tiles:minion_range] and a melee attack."
+				"The Berserker will continue fighting after the realm is cleared, until it is killed.").format(**self.fmt_dict())
+				##TODO Clicking somewhere after realms are cleared will make you autowalk and the berserker will kill you instantly.
 	def cast(self, x, y):
 		unit = Berserker()
 		apply_minion_bonuses(self, unit)
@@ -2278,7 +2287,7 @@ class Machination(Spell):
 		self.name = "Cold Machination"
 		self.tags = [Tags.Ice, Tags.Metallic, Tags.Sorcery, Tags.Conjuration]
 		self.level = 3 ##Aiming for level 3 or 4. 3 Competes with lightning spire, and silver spear. 4 with fewer metallic spells. Maybe push this to 5?
-		self.asset = ["TcrsCustomModpack", "Icons", "cold_machination"] #TODO Make this look a bit colder and less like an ice block. Use half of freeze's icon and half spikeball?
+		self.asset = ["TcrsCustomModpack", "Icons", "cold_machination"]
 
 		self.range = 8
 		self.can_target_empty = False
@@ -2564,28 +2573,38 @@ class SummonEyedra(Spell):
 		self.summon(unit, target)
 
 
+def QuicksilverGeist():
+	geist = Ghost()
+	geist.name = "Mercurial Geist"
+	geist.asset_name = "mercurial_geist"
+	geist.max_hp = 25
+	geist.tags.append(Tags.Metallic)
+	trample = SimpleMeleeAttack(12,trample=True)
+	geist.spells.append(trample)
+	return geist
 
 class ShieldOrb(OrbSpell):
 	def on_init(self):
 		self.name = "Unbreakable Orb"
 		self.tags = [Tags.Metallic, Tags.Orb, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "metal_orb"]
-		self.level = 2 ##Attempting to produce a low level orb spell that's very low impact with many charges. Unlike other orbs.
+		self.level = 2 ##Attempting to produce a low level orb spell that's very low impact with many charges.
 	
 		self.range = 12
 		self.max_charges = 20
-		self.minion_health = 5
+		self.minion_health = 25
 		self.minion_damage = 15
-
+		
 		self.upgrades['erupt'] = (1, 2, "Volcanic Heart", "If the orb ends over a chasm, you cast your Volcanic Eruption on said chasm.")
 		self.upgrades['cleave'] = (1, 2, "Angelic Sword", "The orb gains the cleaving sword of your Call Seraph spell instead of a simple melee attack.")
 		self.upgrades['spear'] = (1, 5, "Argent Spear", "The orb has your silver spear on a 2 turn cooldown.")
+		self.upgrades['orb_walk'] = (1, 0, "Quicksilver Coating", "Targeting an existing Unbreakable Orb destroys it, summoning a Quicksilver Geist.")
 
 	def get_description(self):
 		return ("Summons an Unbreakable Orb which has a melee attack that does [{minion_damage}_physical:physical] damage.\n"
 				"The orb has no will of its own, each turn it will float one tile towards the target.\n"
 				"The orb is immune to all elements.").format(**self.fmt_dict())
-
+	
 	def on_orb_move(self, orb, next_point):
 		pass
 
@@ -2614,11 +2633,29 @@ class ShieldOrb(OrbSpell):
 
 	def on_orb_collide(self, orb, next_point):
 		orb.level.show_effect(next_point.x, next_point.y, Tags.Physical)
-		if self.get_stat('erupt'):
+		if self.get_stat('erupt') and self.owner.level.tiles[orb.x][orb.y].is_chasm: ##TODO Seems to work, check more.
 			eruption = self.caster.get_or_make_spell(Volcano)
-			self.caster.level.act_cast(orb, eruption, orb.x, orb.y, pay_costs=False)
+			self.caster.level.act_cast(self.caster, eruption, orb.x, orb.y, pay_costs=False)
 		yield
 
+	def on_orb_walk(self, existing):
+		x = existing.x
+		y = existing.y
+		existing.kill()
+		geist = QuicksilverGeist()
+		spell = self.caster.get_or_make_spell(MercurizeSpell)
+		geist.turns_to_death = spell.get_stat('minion_duration', base=32)
+		apply_minion_bonuses(self, geist)
+		self.summon(geist, target=Point(x,y))
+		
+		if spell.get_stat('noxious_aura'):
+			geist.apply_buff(DamageAuraBuff(damage=1, damage_type=Tags.Poison, radius=2))
+		if spell.get_stat('vengeance'):
+			geist.apply_buff(MercurialVengeance(spell))
+		yield
+
+	def get_extra_examine_tooltips(self):
+		return [self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2], self.spell_upgrades[3], QuicksilverGeist()]
 
 
 class FungalSpores(Buff):
@@ -2868,16 +2905,16 @@ class Cloudwalk(Spell):
 		self.name = "Cloudwalk"
 		self.tags = [Tags.Ice, Tags.Lightning, Tags.Translocation]
 		self.level = 3 ##Extremely niche but good with cloud builds like stormcaller. Designed to be better than blink if any clouds are available.
+		self.asset = ["TcrsCustomModpack", "Icons", "cloud_walk"]
 		self.description = "Teleport to a tile in line of sight which has a Blizzard or Thundercloud on it. Consumes the cloud."
 		
 		self.range = 99
 		self.max_charges = 4
 		self.must_target_empty = True
-		self.clouds = [BlizzardCloud, StormCloud]
+		self.clouds = [BlizzardCloud, StormCloud, RainCloud]
 
 		self.upgrades['requires_los'] = (-1, 0, "Blindcasting")
-		self.upgrades['strange'] = (1, 0, "Strange Weather", "Can now target: Fire clouds, Poison clouds, Blood clouds") ##TODO ensure this is up to date with all clouds in my mod
-		##todo this ought work with rain clouds
+		self.upgrades['strange'] = (1, 0, "Strange Weather", "Can now target: Fire clouds, Poison clouds, Blood clouds")
 
 	def can_cast(self, x, y): ##Absolute 9000 IQ idea, see if quickcast can be set here so it applies while a spell is being cast.
 		if self.get_stat('requires_los'):
@@ -2994,7 +3031,7 @@ class ShrapnelBreath(BreathWeapon):
 		self.damage_type = Tags.Physical
 
 	def get_description(self):
-		return "Breathes a cone of shrapnel dealing %d damage" % self.damage
+		return "Breathes a cone of shrapnel dealing %d [physical] damage" % self.damage
 
 	def per_square_effect(self, x, y):
 		self.caster.level.deal_damage(x, y, self.damage, self.damage_type, self)
@@ -3006,7 +3043,7 @@ class SteelFangsBuff(Buff):
 
 	def on_init(self):
 		self.name = "Steel Fangs"
-		self.stack_type = STACK_REPLACE
+		self.stack_type = STACK_INTENSITY
 		self.buff_type = BUFF_TYPE_BLESS
 		self.color = Tags.Dragon.color
 		self.hp_bonus = 1
@@ -3018,53 +3055,40 @@ class SteelFangsBuff(Buff):
 		self.breath_damage = self.spell.get_stat('damage')
 		owner.cur_hp += self.spell.get_stat('hp_bonus')
 		owner.max_hp += self.spell.get_stat('hp_bonus')
-		if Tags.Dragon in self.owner.tags:
-			for spell in self.owner.spells:
-				if isinstance(spell, BreathWeapon): ##TODO not working properly, probably caused by applying metallic early on - don't forget to match the apply and unapply
-					spell.damage += self.breath_damage ##Actually caused by bullshit python typing
-		if Tags.Metallic in self.owner.tags:
-			for spell in self.owner.spells:
-				if hasattr(spell, 'damage'):
-					spell.damage += self.damage
-		
-	def on_unapplied(self):
-		self.damage = self.spell.get_stat('breath_damage')
-		self.breath_damage = self.spell.get_stat('damage')
-		self.owner.cur_hp -= self.spell.get_stat('hp_bonus')
-		self.owner.max_hp -= self.spell.get_stat('hp_bonus')
-		if Tags.Dragon in self.owner.tags:
-			for spell in self.owner.spells:
-				s_type = type(spell)
-				if (s_type == BreathWeapon):
-					spell.damage -= self.breath_damage
-		if Tags.Metallic in self.owner.tags:
-			for spell in self.owner.spells:
-				if hasattr(spell, 'damage'):
-					spell.damage -= self.damage
+		for spell in self.owner.spells:
+			if not hasattr(spell, 'damage'):
+				continue
+			if isinstance(spell, BreathWeapon):
+				spell.damage += self.breath_damage
+			else:
+				if self.spell.get_stat('steal') and isinstance(spell, SimpleMeleeAttack) and not spell.drain:
+					spell.drain = True
+				spell.damage += self.damage
+
 
 
 class SteelFangs(Spell):
 	def on_init(self):
 		self.name = "Steel Fangs"
-		self.level = 3 ##Tentative 4, but dragon roar is just way stronger overall, affects the whole map, etc. Maybe level 4 with a billion charges?
+		self.level = 3 ##Tentative 4, but dragon roar is just way stronger overall, affects the whole map, etc. Making it last forever as a compromise.
 		self.asset = ["TcrsCustomModpack", "Icons", "steelfangs"] ##Variation of Drakentooth
 		self.tags = [Tags.Enchantment, Tags.Dragon, Tags.Metallic]
 		
 		self.can_target_empty = False
 		self.range = 99
-		self.max_charges = 15
+		self.max_charges = 10
 		self.breath_damage = 10
-		self.damage = 10 ##TODO this scales with metallic and enchantment (and dragon) damage should it be forced to use one?
+		self.damage = 10
 		self.hp_bonus = 25
 		self.unit_tags = [Tags.Dragon, Tags.Metallic]
 
-		self.upgrades['breath'] = (1, 0, "Heart of the Drake", "Gives metallic units a breath attack, if they don't have one, dealing physical damage.")
-		self.upgrades['soul'] = (1, 0, "Steel Thy Soul", "Non-[arcane:arcane] units gain the Faetouched modifier.")
-		self.upgrades['steal'] = (1, 0, "Stealing Fangs", "Gives melee attacks life stealing.") ##TODO implement
+		self.upgrades['breath'] = (1, 5, "Heart of the Drake", "Gives metallic units a breath attack that deals physical damage.")
+		self.upgrades['soul'] = (1, 4, "Steel Thy Soul", "Non-[arcane:arcane] units gain the Faetouched modifier.")
+		self.upgrades['steal'] = (1, 2, "Stealing Fangs", "Gives simple melee attacks a life stealing effect.")
 		
 	def get_description(self):
-		return ("Target [dragon] minion's breath attack gains [{damage}_damage:damage] bonus damage, scaling with your metallic and enchantment damage.\n "
-				"Target [metallic] minion gains [{breath_damage}_damage:breath_damage] bonus damage on its attacks scaling with your breath damage.\n "
+		return ("Target [dragon] or [metallic] minion gains bonus breath attack [{damage}_damage:damage] damage, scaling with this spell's damage stat, "
+				"and its other attacks gain [{breath_damage}_damage:breath_damage] bonus damage scaling with this spell's breath damage.\n "
 				"Target minion then becomes a [metallic] [dragon] if it wasn't already, and gains 25 hp.").format(**self.fmt_dict())
 
 	def cast(self, x, y):
@@ -3086,7 +3110,7 @@ class SteelFangs(Spell):
 					breath_weapon = False
 					for spell in unit.spells:
 						s_type = type(spell)
-						if (s_type == BreathWeapon): ##TODO see if this works at all.
+						if (s_type == BreathWeapon):
 							breath_weapon = True
 					if not breath_weapon:
 						buff.spells.append(ShrapnelBreath())
@@ -3109,7 +3133,6 @@ class Leapfrog(Spell):
 		self.range = 16
 		self.max_charges = 15
 		##Implement line of sight checking for the custom can_cast def
-		##TODO see if  cantrip cascade messes with this
 		self.upgrades['quick_cast'] = (1, 3, "Quickcast", "Casting Leapfrog does not end your turn. Consumes 2 extra charges each cast.")
 		self.upgrades['wolf'] = (1, 1, "Leapdog", "Cast your wolf at the spot you jumped from. Consumes 1 extra charge from Leapfrog")
 		self.upgrades['walls'] = (1, 3, "Parkour", "Can now be cast on, or across walls.")
@@ -3201,7 +3224,7 @@ class KnightlyLeap(Spell):
 		self.level = 2 #Extremely mediocre spell in functionality without some sort of upgrade. Could probably be level 1. Nearly infinite charges would be fine.
 		self.tags = [Tags.Holy, Tags.Sorcery, Tags.Translocation]
 		self.asset = ["TcrsCustomModpack", "Icons", "knightlyleap"]
-		##TODO see if  cantrip cascade messes with this
+		##TODO Fix this problem: Cantrip cascade means that this should probably not be a sorcery.
 		self.requires_los = False
 		self.range = 3
 		self.max_charges = 25
@@ -3327,7 +3350,7 @@ class ChaosBeastBuff(Buff):
 
 def ChaosBeast(s=None):
 	unit = Unit()
-	unit.asset = ["TcrsCustomModpack", "Units", "chaoticsnakeball"] ##TODO modify the idle sprites to be more like the attacking sprite.
+	unit.asset = ["TcrsCustomModpack", "Units", "chaoticsnakeball"]
 	unit.name = "Chaotic Snakeball"
 	unit.max_hp = 36
 	unit.spells.append(SimpleMeleeAttack(8, buff=Poison, buff_duration=10))
@@ -3688,7 +3711,7 @@ class AnimateClutter(Spell):
 		self.suffixes = ['claw', 'dagger', 'disk', 'fang', 'flag', 'horn', 'hourglass', 'lens', 'orb', 'scale', 'sigil', 'tome']
 		self.asset_list = []
 		
-		self.upgrades['sigil'] = (1, 0, "Sigilite", "Your sigils can summon their associated unit once.") ##TODO
+		self.upgrades['sigil'] = (1, 0, "Sigilite", "Your sigils can summon their associated unit once.") ##TODO implement
 		self.upgrades['sorcerer'] = (1, 1, "The Sorcerer's Apprentice", "Instead of animating trinkets, summon a living scroll for each tag in each spell you know.")
 		self.upgrades['selfequip'] = (1, 2, "Chained Piper", "Your animated Pipes and Links equip a copy of themselves.")
 
@@ -3756,9 +3779,7 @@ class AnimateClutter(Spell):
 				except FileNotFoundError: ##figure out the actual name of this error
 					asset = ["TcrsCustomModpack", "Units", "AnimateTrinket" , "trinket_dagger_anim"] ##Produce a teapot or broom as the default.
 					asset_list.append(asset)
-		self.asset_list = asset_list
-		##DEVILTHORN asset + assets after poison pipe
-		##Bramblethorn asset DEVILTHORN
+		self.asset_list = asset_list ##TODO Update the new items added in the beta patch
 
 
 class HP_X_Damage(Spell):
@@ -3766,6 +3787,7 @@ class HP_X_Damage(Spell):
 		self.name = "Hp%Distance:Dmg"
 		self.tags = [Tags.Arcane, Tags.Sorcery]
 		self.level = 4 ##Difficult to measure its effectiveness, because it's as good as you are at choosing realms +  your arithmetic
+		self.asset = ["TcrsCustomModpack", "Icons", "hp_distance"]
 
 		self.range = 10
 		self.max_charges = 10
@@ -3831,21 +3853,22 @@ class Overload(Spell):
 	def on_init(self):
 		self.name = "Overload"
 		self.tags = [Tags.Lightning, Tags.Sorcery]
-		self.description = "Deals [{lightning_damage}_lightning:lightning] damage to a connected group of units. Metallic units are stunned and take [physical] damage."
 		self.level = 4 ##Aiming for level 4,  high charge count, weaker than chain lightning for huge groups but much stronger on connected groups?
-		self.asset = ["TcrsCustomModpack", "Icons", "overload"]
+		self.asset = ["TcrsCustomModpack", "Icons", "overload"] ##TODO This is ugly, make it less ugly
 
 		self.can_target_empty = False
 		self.damage = 20
 		self.range = 5
-		self.max_charges = 8
+		self.max_charges = 11
 		self.duration = 2
 
 		self.upgrades['ion'] = (1, 4, "Ionizing", "Also deals arcane damage.")
 		self.upgrades['power'] = (1, 3, "Crackle with Power", "If you are part of the connected group, cast lightning bolt on random tiles twice for each unit.")
 		self.upgrades['conductive'] = (1, 2, "Superconductivity", "If there are any metallic units in the group, cast conductivity on them before dealing damage.")
 
-		##TODO add description here
+	def get_description(self):
+		return ("Deals [{damage}_lightning:lightning] damage to a connected group of units."
+				" Metallic units are stunned and take [physical] damage.").format(**self.fmt_dict())
 
 	def get_impacted_tiles(self, x, y):
 		candidates = set([Point(x, y)])
@@ -3913,7 +3936,7 @@ class UtterDestruction(Spell):
 		self.name = "Total Annihilation"
 		self.tags = [Tags.Dark, Tags.Sorcery]
 		self.level = 6
-		self.description = "A wave of destruction moves from the right side of the realm to the left half, as long as you channel. Each enemy in the wave takes dark damage."
+		self.asset = ["TcrsCustomModpack", "Icons", "total_annihilation"]
 		self.channel_cast = False
 		self.can_target_self = True
 		self.tile_index = 0
@@ -3922,11 +3945,16 @@ class UtterDestruction(Spell):
 		self.range = 0
 		self.max_charges = 5
 		self.max_channel = 20
-		self.damage = 13
-		##TODO make proper description
+		self.damage = 20
+
 		self.upgrades['devourmind'] = (1, 2, "Absolute Insanity", "Cast your Devour Mind on every viable target in the wave.")
 		self.upgrades['dedication'] = (1, 3, "Complete Dedication", "If the wave reaches the end of the realm, cast your Heaven's Wrath.")
 		self.upgrades['max_channel'] = (80, 2, "Supreme Destruction", "The wave gains 80 more turns of max channeling.")
+
+	def get_description(self):
+		return ("A wave of destruction moves from the left side of the realm to the right side, advancing each turn that you channel. "
+				"The amount of tiles damaged each turn is a random number between its damage value, and 10 times that value.\n"
+				"Each enemy in an affected tile takes [{damage}_dark:dark] damage. Will damage the wizard but only deals half damage.").format(**self.fmt_dict())
 
 	def cast(self, x, y, channel_cast=False):
 		if self.tiles == []:
@@ -3960,7 +3988,11 @@ class UtterDestruction(Spell):
 				#if spell.can_cast(t.x, t.y):
 				if self.caster.level.get_unit_at(t.x, t.y) != None:
 					self.caster.level.act_cast(self.caster, spell, t.x, t.y, pay_costs=False, queue=True)
-			self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Dark, self)
+			u = self.owner.level.get_unit_at(t.x, t.y)
+			if u and u.is_player_controlled:
+				self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage') // 2, Tags.Dark, self)
+			else:
+				self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Dark, self)
 		yield
 			
 
@@ -3968,8 +4000,8 @@ class DominoeAttack(Spell):
 	def on_init(self):
 		self.name = "Dominoe"
 		self.tags = [Tags.Fire, Tags.Sorcery]
-		self.level = 2 ##Comparable to death touch and my own absorb.
-		self.asset = ["TcrsCustomModpack", "Icons", "dominoe"]
+		self.level = 2 ##Comparable to death touch and my own absorb. I like this spell but it seems very weak. Its upgrades are cool to compensate.
+		self.asset = ["TcrsCustomModpack", "Icons", "dominoe"] ##Very ugly.
 		
 		self.range = 1
 		self.melee = True
@@ -4084,7 +4116,8 @@ class UnstableSpellStorm(Spell):
 		self.name = "Unstable Spell Storm"
 		self.tags = [Tags.Blood, Tags.Lightning, Tags.Arcane, Tags.Enchantment]
 		self.level = 8 ##Undeniably a level 8 spell. Probably needs a nerf before even being released. It either kills the entire stage or you. Which is the goal.
-		
+		self.asset = ["TcrsCustomModpack", "Icons", "unstable_spell_storm"]
+
 		self.hp_cost = 25
 		self.range = 0
 		self.max_charges = 1
@@ -4380,10 +4413,9 @@ def construct_spells():
 	spellcon = [MetalShard, CorpseExplosion, FlyWheel, Rockfall, Improvise, Absorb, Haste, BloodOrbSpell, EnchantingCross, Icepath,
 				SummonBookwyrm, Exsanguinate, Grotesquify, WordoftheSun, WordofFilth, HolyBeam, Amalgamate, SummonCauldron, OccultBlast, TidesofWoe,
 				RingofFishmen, CallBerserker, ChaosBolt, Machination, Skulldiggery, SummonEyedra, ShieldOrb, PoisonousGas, Hemortar, SummonIcyBeast,
-				RainbowSeal, SteelFangs, Leapfrog, KnightlyLeap, SummonArmor, SummonChaosBeast, BeckonCowardlyLion, PowerShift, Icebeam, TreeFormSpell,
-				AnimateClutter, HP_X_Damage, Overload, UtterDestruction, DominoeAttack, UnstableSpellStorm, Cloudwalk, Landmines, TheSecondSeal,
-				corruptionTest
-				 ## , MirrorShield, PortableHole
+				RainbowSeal, SteelFangs, Leapfrog, KnightlyLeap, SummonChaosBeast, BeckonCowardlyLion, PowerShift, Icebeam, TreeFormSpell,
+				AnimateClutter, HP_X_Damage, Overload, UtterDestruction, DominoeAttack, UnstableSpellStorm, Cloudwalk, TheSecondSeal,
+				 ## , MirrorShield, PortableHole,  SummonArmor,  Landmines,
 				]
 	for s in spellcon:
 		Spells.all_player_spell_constructors.append(s)
