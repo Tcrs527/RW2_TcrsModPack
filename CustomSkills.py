@@ -493,8 +493,8 @@ class Friction(Upgrade):
 		self.level = 4
 		self.asset = ["TcrsCustomModpack", "Icons", "friction"]
 		self.duration = 4
-		self.description = ("Gain a stack of friction whenever you move. Gain two stacks for teleporting. Lose all stacks when you cast a fire spell." +
-							"Each stack of friction grants fire spells 5 damage, 0.5 radius and 0.5 range. Lasts [{duration}_turns:duration].").format(**self.fmt_dict())
+		self.description = ("Gain a stack of friction whenever you move. Gain two stacks for teleporting. Lose all stacks when you cast a [Fire] spell." +
+							"Each stack of friction grants [Fire] spells 5 damage, 0.5 radius and 0.5 range. Lasts [{duration}_turns:duration].").format(**self.fmt_dict())
 		self.owner_triggers[EventOnMoved] = self.on_moved
 
 	def on_moved(self, evt):
@@ -590,9 +590,9 @@ class IcyVeins(Upgrade):
 
 	def get_description(self):
 		return ("Generate 1 iceblood for every ice damage dealt to a unit. "
-				"Each turn automatically cast a viable blood spell on a random target, then lose all iceblood"
+				"Each turn automatically cast a viable blood spell on a random target, then lose all iceblood.\n"
 				"A spell can be cast for 10 iceblood per the level of the blood spell, plus the hp cost in iceblood.\n"
-				"Always attempts to cast your blood spells in order from top to bottom."
+				"Always attempts to cast your blood spells in order from top to bottom, conjuration spells are cast on a neighbouring tile.\n"
 				"Current Iceblood: %d\n" % self.iceblood)
 
 class PuregleamBuff(Buff):
@@ -643,7 +643,7 @@ class HolyMetalLantern(Upgrade):
 	def get_description(self):
 		return ("Whenever you cast a [holy] or [metallic] spell, gain puregleam with duration equal to the spell's level.\n"
 				"While you have the buff up to [{num_targets}:num_targets] enemy units in line of sight are either "
-				"dealt [{damage}_holy:holy] and blinded for [{duration}_turns:duration], or dealt [{damage}_physical:physical] and stunned for 1 turn.").format(**self.fmt_dict())
+				"dealt [{damage}_holy:holy] damage and blinded for [{duration}_turns:duration], or dealt [{damage}_physical:physical] damage and stunned for 1 turn.").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
 		if Tags.Holy in evt.spell.tags or Tags.Metallic in evt.spell.tags:
@@ -792,7 +792,7 @@ class MageArmor(Upgrade):
 		self.level = 5
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_added
 		self.duration = 10
-		self.description = ("Upon entering a realm, gain 25%  resistance to each damage type for each of your enchantment spell tags for [{duration}_turns:duration].\n" +
+		self.description = ("Upon entering a realm, gain 25%  resistance to each damage type for each spell tags in each spell you know for [{duration}_turns:duration].\n" +
 							"[Fire] grants [Fire] resistance, then repeat for all tags with corresponding damage types." +
 							"[Nature] tags grant [Poison] resistance and [Metallic] tags [Physical] resistance.").format(**self.fmt_dict())
 
@@ -801,8 +801,8 @@ class MageArmor(Upgrade):
 			restags = {Tags.Fire:0,Tags.Ice:0,Tags.Lightning:0,Tags.Arcane:0,Tags.Dark:0,Tags.Holy:0,Tags.Poison:0,Tags.Physical:0}
 			spells = self.owner.spells
 			for spell in spells:
-				if Tags.Enchantment not in spell.tags:
-					continue
+				#if Tags.Enchantment not in spell.tags: ##Used to be limited to enchanting spells, does this matter?
+				#	continue
 				for t in spell.tags:
 					if t == Tags.Nature:t = Tags.Poison
 					if t == Tags.Metallic:t = Tags.Physical
@@ -914,8 +914,8 @@ class WeaverOfOccultism(Upgrade):
 		self.minion_duration = 5
 	
 	def get_description(self):
-		return ("For every 3 spells you cast, summon ghosts at each spell's location. Ghosts last [{minion_duration}_turns:minion_duration] turns.\n"
-				"If the [arcane] tag was in any spell, summon a void ghost, then repeat for [dark], [holy], and [blood]."
+		return ("For every 3 spells you cast, summon ghosts at the target tile of each spell. Ghosts last [{minion_duration}_turns:minion_duration] turns.\n"
+				"If the [arcane] tag was in any spell, summon a void ghost, then repeat for [dark], [holy], and [blood].\n"
 				"Does not work with free spells.").format(**self.fmt_dict())
 
 	def on_cast(self, evt): ##TODO standardize this to only work with specific tags?
@@ -1095,7 +1095,8 @@ class ArclightEagle(Upgrade): ##Quickcast nerfed, does this get changed to 2 spe
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.spells_cast = 0
 		self.lightning = False
-		
+
+
 	def on_cast(self, evt):
 		if Tags.Lightning in evt.spell.tags:
 			self.lightning = True
@@ -1398,14 +1399,14 @@ class RimeorbMainBuff(Buff):
 		if not self.owner.has_buff(RimeorbDamageBuff):
 			buff = RimeorbDamageBuff(self.skill)
 			buff.source = self
-			self.owner.apply_buff(buff)
+			self.owner.apply_buff(buff, 20)
 		orbs = [t for t in self.owner.level.units if not self.owner.level.are_hostile(t, self.owner) and t.name[-4:] == " Orb" and not t.has_buff(RimeorbDamageBuff)]
 		if orbs == []:
 			return
 		o = random.choice(orbs)
 		buff = RimeorbDamageBuff(self.skill)
 		buff.source = self
-		o.apply_buff(buff)
+		o.apply_buff(buff, o.turns_to_death)
 			
 	def on_unapplied(self):
 		print("Unapply")
@@ -1455,8 +1456,8 @@ class ChaosScaleBuff(Buff):
 	def __init__(self, skill):
 		self.skill = skill
 		self.breath_damage = skill.get_stat('breath_damage')
-		self.range = 5
-		self.cooldown = 3
+		self.range = 4
+		self.cooldown = 2
 		Buff.__init__(self)
 		
 	def on_init(self):
@@ -1469,20 +1470,20 @@ class ChaosScaleBuff(Buff):
 
 	def on_advance(self):
 		self.cooldown -= 1
-		if self.cooldown > 0: ##Revert to 0 after test
+		if self.cooldown > 0:
 			return
 		targets = [t for t in self.owner.level.get_units_in_ball(self.owner, self.range) if are_hostile(self.owner, t) and self.owner.level.can_see(t.x, t.y, self.owner.x, self.owner.y)]
 		self.range += 1
 		if targets == []:
 			return
-		unit = random.choice(targets)
 		breath = self.owner.get_or_make_spell(RiotscaleBreath)
 		breath.range = self.range
 		breath.source = self
 		breath.damage = self.breath_damage
+		unit = random.choice(targets)
 		self.owner.level.act_cast(self.owner, breath, unit.x, unit.y, pay_costs=False)
-		self.range = 5
-		self.cooldown = 3
+		self.range = 4
+		self.cooldown = 2
 		
 class ChaosScaleLantern(Upgrade): ##TODO This might be teaching you spells based on last cast, see if it's this or duergar helm.
 	def on_init(self):
@@ -1492,12 +1493,13 @@ class ChaosScaleLantern(Upgrade): ##TODO This might be teaching you spells based
 		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.breath_damage = 15
-		self.range = 7
+		self.range = 4
 
 	def get_description(self):
 		return ("Whenever you cast a [Dragon] or [Chaos] spell, gain Riotscale Rage with duration equal to the spell's level. Dragon spells give 3 times their level.\n"
-				"The buff gives you a breath attack with a 3 turn cooldown. The breath attack has a range of 5 and deals 15 [Physical], [Fire], or [Lightning] damage randomly."
-				" Each turn the breath does not activate, and is off cooldown, it gains 1 range until it activates.").format(**self.fmt_dict())
+				"The buff gives you an automatic breath attack with a 1 turn cooldown.\n"
+				" The breath attack has a range of 4 and deals [15:breath_damage] [Physical], [Fire], or [Lightning] damage randomly."
+				" Each turn the breath gains 1 range, but when it activates its range resets to 4.").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
 		if Tags.Dragon in evt.spell.tags or Tags.Chaos in evt.spell.tags:
@@ -1513,10 +1515,11 @@ class AuraReading(Upgrade):
 		self.name = "Aura Reading"
 		self.level = 5
 		self.tags = [Tags.Arcane, Tags.Dark, Tags.Enchantment] ##TODO implement modifiable aura damage on inferno engines.
-		self.description = "Your Aura damage is increased by 2, even damage which is said to be fixed. When a unit's aura ends, it spawns a Purple Pachyderm for each 50 damage dealt by the aura."
+		self.description = ("When an aura is given to an allied unit, that unit also gains a 2 damage physical aura with the same size and duration.\n" +
+							"When a unit's aura ends, it spawns a Purple Pachyderm for each 50 damage dealt by the aura.")
 		self.asset = ["TcrsCustomModpack", "Icons", "aura_reading"]
 		
-		self.global_bonuses['aura_damage'] = 2
+		self.global_triggers[EventOnBuffApply] = self.buff_applied
 		self.global_triggers[EventOnBuffRemove] = self.buff_removed
 		self.global_triggers[EventOnDeath] = self.on_death
 		
@@ -1530,6 +1533,17 @@ class AuraReading(Upgrade):
 			return
 		buff = evt.unit.get_buff(DamageAuraBuff)
 		self.spawn_pachyderm(buff.damage_dealt)
+
+	def buff_applied(self, evt):
+		if isinstance(evt.buff, DamageAuraBuff) and evt.buff.name != "Physical Aura": ##TODO check to see if enemy auras grant them a version of this.
+			print("Applying Buff")
+			buff = DamageAuraBuff(damage=2, radius=evt.buff.radius, damage_type=[Tags.Physical], friendly_fire=False)
+			buff.stack_type = STACK_REPLACE
+			buff.color = Tags.Physical.color
+			buff.name = "Physical Aura"
+			buff.source = self
+			evt.unit.apply_buff(buff, evt.buff.turns_left)
+			print("Buff Applied")
 
 	def buff_removed(self, evt):
 		if isinstance(evt.buff, DamageAuraBuff):
