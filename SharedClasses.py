@@ -1,9 +1,12 @@
 import Spells
+import copy
 from Level import *
 from Monsters import *
 from CommonContent import *
 
 print("General Content Loaded")
+
+##--------------------Tag Things--------------------
 
 def TagConvertor():
 	tagdict = {	Tags.Living:Tags.Nature,
@@ -159,6 +162,8 @@ def LivingBloodScroll():
 	
 	return unit
 
+##--------------------Tiles--------------------
+
 class PoisonCloud(Cloud):
 
 	def __init__(self, owner, damage=6):
@@ -172,16 +177,36 @@ class PoisonCloud(Cloud):
 		self.description = "Every turn, deals %d poison damage to any creature standing within, then debuffs them." % self.damage
 		self.asset_name = 'poison_cloud'
 		self.buff = None
+		self.buff_turns = 3
 
 	def on_advance(self):
 		self.level.deal_damage(self.x, self.y, self.damage, Tags.Poison, self)
 		unit = self.level.get_unit_at(self.x, self.y)
 		if unit and unit.resists[Tags.Poison] < 100:
 			if self.buff == None:
-				unit.apply_buff(Poison(),3)
+				unit.apply_buff(Poison(), self.buffs_turns)
 			else:
-				unit.apply_buff(self.buff,3)
-				
+				unit.apply_buff(self.buff, self.buff_turns)
+
+class Hole(Cloud):
+
+	def __init__(self):
+		Cloud.__init__(self)
+		self.name = "Hole"
+		self.color = Color(210, 210, 210)
+		self.description = "Any non-flying unit entering the web is stunned for 1 turn.  This destroys the hole."
+		self.duration = 12
+		
+		self.asset_name = ["TcrsCustomModpack", "Tiles", "hole"] ##TODO Clouds are dumb
+		#self.asset_name = "hole"
+
+	def on_unit_enter(self, unit):
+		if unit.flying != True:
+			unit.apply_buff(Stun(), 2)
+			self.kill()
+
+##--------------------Buffs--------------------
+
 class Fear(Buff): ##Migrate all fear effects over to Dylan's Fear
 
 	def on_init(self):
@@ -273,6 +298,8 @@ class HasteBuff(Buff):
 	def on_advance(self):
 		if self.owner.is_alive():
 			self.owner.advance()
+
+##--------------------Units--------------------
 
 def Hydra():
 	snek = Unit()

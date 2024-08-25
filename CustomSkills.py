@@ -334,7 +334,7 @@ class Chiroptyvern(Upgrade):
 class Condensation(Upgrade):
 	def on_init(self):
 		self.name = "Condensation"
-		self.tags = [Tags.Ice, Tags.Conjuration]
+		self.tags = [Tags.Ice, Tags.Nature, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "condensation"]
 		self.level = 6 ##Strong with stormcaller, not amazingly OP on its own.
 		
@@ -342,19 +342,26 @@ class Condensation(Upgrade):
 		self.minion_health = 10
 		self.minion_damage = 3
 		self.minion_range = 3
-		self.description = "Each turn, convert blizzard clouds or rain clouds in neighbouring tiles into ice slimes."
+		self.description = "Each turn, convert blizzard clouds or rain clouds in neighbouring tiles into ice slimes or water elementals respectively."
 		
 	def get_extra_examine_tooltips(self):
-		return [IceSlime()]
+		return [IceSlime(), WaterElemental()]
 
 	def on_advance(self):
 		for p in self.owner.level.get_points_in_rect(self.owner.x - self.radius, self.owner.y - self.radius, self.owner.x + self.radius, self.owner.y + self.radius):
 			tile = self.owner.level.tiles[p.x][p.y]
-			if isinstance(tile.cloud, BlizzardCloud) or isinstance(tile.cloud, RainCloud):
+			if isinstance(tile.cloud, BlizzardCloud):
 				tile.cloud.kill()
 				unit = IceSlime()
 				apply_minion_bonuses(self, unit)
 				self.summon(unit=unit, target=tile)
+			elif isinstance(tile.cloud, RainCloud):
+				tile.cloud.kill()
+				unit = WaterElemental()
+				apply_minion_bonuses(self, unit)
+				self.summon(unit=unit, target=tile)
+				unit.apply_buff(SoakedBuff(), 15)
+
 
 
 class AngularGeometry(Upgrade): ##TODO fix this bullshit, it needs work
@@ -1339,36 +1346,44 @@ class Overheal(Upgrade):
 			self.summon(unit)
 			self.total -= 75
 
-class WalkTheOrb(Upgrade): ##This might be a better equipment than skill. Very very niche.
+class WalkTheOrb(Upgrade):
 	def on_init(self):
-		self.name = "Walk the Orb"
-		self.level = 6
+		self.name = "Orbstrider"
+		self.level = 5
 		self.tags = [Tags.Orb]
-		self.description = ("When you use an orb spell to orb walk, do 50 damage to one random enemy for each different tag in orb spells you know.\n"
-							" E.g. converts [Ice] to [Ice] damage, but also [Metallic] to [Physical] damage, and [Blood] to [Dark] damage.").format(**self.fmt_dict())
+		self.asset = ["TcrsCustomModpack", "Icons", "orbwalker"]
+		
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.tagconv = TagToDmgTagConvertor()
-		self.damage = 50
 		
+		self.damage = 20
+		
+	def get_description(self):
+		return ("When you cast an orb spell deal 20 damage to one random enemy for each different tag in orb spells you know. "
+				"Deal 5 times as much damage if you used an orb to orb walk.\n"
+				" Converts [Fire], [Ice], [Lightning], [Arcane], [Dark], [Holy] tags. Also converts [Metallic] to [Physical], and [Blood] to [Dark].").format(**self.fmt_dict())
+
 	def on_cast(self, evt):
 		if Tags.Orb not in evt.spell.tags:
 			return
-		if not ( evt.spell.get_stat('orb_walk') and evt.spell.get_orb(evt.x, evt.y) ):
-			return
-		print("Orb Walking Event")
+		multiplier = 1
+		if ( evt.spell.get_stat('orb_walk') and evt.spell.get_orb(evt.x, evt.y) ):
+			multiplier = 5
+
 		orb_tags = []
 		for s in self.owner.spells:
+			if Tags.Orb not in s.tags:
+				continue
 			for tag in s.tags:
 				if tag not in orb_tags:
 					orb_tags.append(tag)
-		print(orb_tags)
 		for tag in orb_tags:
 			if tag in self.tagconv:
 				dmg_tag = self.tagconv[tag]
 				targets = [u for u in self.owner.level.units if self.owner.level.are_hostile(self.owner, u)]
 				if targets != []:
 					targ = random.choice(targets)
-					self.owner.level.deal_damage(targ.x, targ.y, self.damage, dmg_tag, self)
+					self.owner.level.deal_damage(targ.x, targ.y, self.damage * multiplier, dmg_tag, self)
 					
 
 
@@ -1613,7 +1628,7 @@ class PleonasmFaker(Spell):
 class Pleonasm(Upgrade):
 	def on_init(self):
 		self.name = "Pleonasm"
-		self.level = 0
+		self.level = 5
 		self.tags = [Tags.Sorcery]
 		self.asset = ["TcrsCustomModpack", "Icons", "pleonasm"]
 		self.description = "When you cast any spell, your on-cast effects trigger again. This does not recast the spell itself."
@@ -1632,6 +1647,7 @@ class ChaosLord(Upgrade):
 	def on_init(self):
 		self.name = "Baron of Chaos"
 		self.tags = [Tags.Chaos]
+		self.asset = ["TcrsCustomModpack", "Icons", "baron_of_chaos"]
 		self.level = 7 ##Needs some more buffs, level 7 is too weak.
 		
 		self.tag_bonuses[Tags.Chaos]['damage'] = 3
@@ -1732,7 +1748,7 @@ class VoidCaller(Upgrade):
 	def on_init(self):
 		self.name = "Puredrake Voidcaller"
 		self.tags = [Tags.Arcane, Tags.Holy, Tags.Dragon]
-		self.level = 0 ##This is pretty strong at present. Doesn't seem too powerful with corruption effects like mordred's void tango.
+		self.level = 6 ##This is pretty strong at present. Doesn't seem too powerful with corruption effects like mordred's void tango.
 		self.asset = ["TcrsCustomModpack", "Icons", "puredrake"]
 
 		self.global_triggers[Level.EventOnMakeFloor] = self.on_floor
@@ -1782,19 +1798,148 @@ class VoidCaller(Upgrade):
 				self.summon(unit)
 				self.counter -= 200
 
+
+class OrbWeaver(Upgrade): ##Shamelessly modified version of silkshifter.
+	def on_init(self):
+		self.name = "Orb Weaver"
+		self.level = 6 ##As strong as burning aura, so pretty strong
+		self.tags = [Tags.Nature, Tags.Metallic, Tags.Conjuration, Tags.Orb]
+		self.asset = ["TcrsCustomModpack", "Icons", "orbweaver"] ##TODO make colours slightly better.
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		
+		example = SpiderFurnace()
+		self.minion_health = example.max_hp
+		self.minion_damage = example.spells[0].damage
+		
+	def on_applied(self, owner):
+		self.owner.tags.append(Tags.Spider)
+
+	def on_unapplied(self):
+		self.owner.tags.remove(Tags.Spider)
+
+	def get_description(self):
+		return ("You are a [spider].\n"
+				"Passively spawn a web each turn on a random adjacent tile.  Webs will not spawn on top of units or walls.\n"
+				"When you cast an [Orb] spell while inside a web, you summon a copper spider.\n"
+				"When you target a web with an orb spell, summon a furnace spider.")
+
+	def get_extra_examine_tooltips(self):
+		return [SpiderFurnace(), SpiderCopper()]
+
+	def on_advance(self):
+		if not any(are_hostile(self.owner, u) for u in self.owner.level.units):
+			return
+		spawn_webs(self.owner)
+		
+	def on_cast(self, evt):
+		if Tags.Orb not in evt.spell.tags:
+			return
+		web = self.owner.level.tiles[self.owner.x][self.owner.y].cloud
+		if web and (type(web) == SpiderWeb):
+			unit = SpiderCopper()
+			apply_minion_bonuses(self, unit)
+			self.summon(unit)
+		target = self.owner.level.tiles[evt.x][evt.y].cloud
+		if target and (type(target) == SpiderWeb):
+			unit_alt = SpiderFurnace()
+			apply_minion_bonuses(self, unit_alt)
+			self.summon(unit_alt)
+
+
+class LightningReflexes(Upgrade):
+	def on_init(self):
+		self.name = "Unnatural Haste"
+		self.level = 5
+		self.tags = [Tags.Sorcery]
+		self.asset = ["TcrsCustomModpack", "Icons", "unnaturalhaste"]
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		
+		self.counter = 0
+		self.num_targets = 2
+
+	def get_description(self):
+		return ("You can cast [{num_targets}:num_targets] extra quick cast spells each turn.").format(**self.fmt_dict())
+
+	def on_cast(self, evt):
+		if evt.pay_costs == False:
+			return
+		print(self.owner.quick_cast_used)
+		self.counter += 1
+		if self.counter < 2 + self.get_stat('num_targets'): ## 1st, 2nd, spell are the ones this adds, 3rd is your normal quick cast spell, and the 4th ends your turn.
+			self.owner.quick_cast_used = False
+			return
+		self.owner.quick_cast_used = True
+		print(self.owner.quick_cast_used)
+	
+	def on_advance(self):
+		self.counter = 0
+
+
 class TheFirstSeal(Upgrade):
 	def on_init(self):
 		self.name = "The First Seal"
-		self.tags = [Tags.Holy, Tags.Dark, Tags.Orb]
+		self.tags = [Tags.Holy, Tags.Chaos, Tags.Conjuration]
+		self.level = 5
+		self.asset = ["TcrsCustomModpack", "Icons", "thefirstseal"]
+
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		self.global_triggers[EventOnUnitAdded] = self.on_unit_enter
+		
+		self.holy_spells = 0
+		self.unit_count = 0
+		
+	def get_description(self):
+		return ("For every 6 levels of [Holy] spells you cast, summon a warlock for 16 turns.\n"
+				"For every 66 [Chaos] or [Demon] units that are summoned, summon Conquest.").format(**self.fmt_dict())
+
+	def get_extra_examine_tooltips(self):
+		return [Warlock(), WhiteRider()]
+
+	def on_cast(self, evt):
+		if not Tags.Holy in evt.spell.tags:
+			return
+		self.holy_spells += evt.spell.level
+		if self.holy_spells >= 6:
+			self.holy_spells -= 6
+			unit = Warlock()
+			apply_minion_bonuses(self, unit)
+			minion_duration = self.get_stat('minion_duration',base=16)
+			unit.turns_to_death = minion_duration
+			self.owner.level.summon(self.owner, unit)
+
+
+	def on_unit_enter(self, evt):
+		if Tags.Chaos in evt.unit.tags or Tags.Demon in evt.unit.tags:
+			self.unit_count += 1
+		if self.unit_count >= 66:
+			self.unit_count = 0
+			unit = WhiteRider()
+			unit.spells.pop(0)
+			apply_minion_bonuses(self, unit)
+			self.owner.level.summon(self.owner, unit)
+
+
+## ------------------------------------------ TODO Implementation Zone -------------------------------------------------------
+
+
+
+
+		
+
+
+class Orders(Upgrade):
+	def on_init(self):
+		self.name = "Orders"
+		self.tags = [Tags.Sorcery]
 		self.level = 0
-		self.description = "When you deal 66 damage with [orb] spells or skills, and [holy] spells or skills, and [dark] spells or skills. Summon Conquest or buff your existing conquest."
+		self.description = "Each turn gain the Orders buff, which has a random tag assigned to it. When you cast a spell with that tag, summon living scrolls."
 
 class ArcticPoles(Upgrade):
 	def on_init(self):
-		self.name = "DEBUG"
+		self.name = "Polar Wizard"
 		self.tags = [Tags.Ice]
 		self.level = 0
-		self.description = "DEBUG"
+		self.description = "Your Ice spells and skills gain 1 damage each turn you are unit closest to the top or bottom of the map. Reset each realm."
 		##TODO something depending on how close you are to the top and bottom of the map?
 
 class OnewithNothing(Upgrade):
@@ -1866,7 +2011,7 @@ class TheHitList(Upgrade):
 	def on_init(self):
 		self.name = "The Hit List"
 		self.level = 0
-		self.description = "When you enter a realm, 1 random enemy gains the target debuff. When it's killed, do something wicked sick."
+		self.description = "When you enter a realm, 1 random enemy gains the target debuff. If it's killed within 5 turns, this skill gains 1 damage permanently."
 
 class StatusDefenseField(Upgrade):
 	def on_init(self):
@@ -1884,7 +2029,7 @@ class Gazette(Upgrade):
 
 class Torpor(Upgrade):
 	def on_init(self):
-		self.name = "Torpor Orb Effect"
+		self.name = "The Torpor Effect"
 		self.level = 0
 		self.tags = [Tags.Enchantment]
 		self.description = "Each attack or spell stuns the user for 1 second."
@@ -1901,7 +2046,7 @@ class TheRiddle(Upgrade):
 		self.name = "The Riddle"
 		self.level = 0
 		self.tags = [Tags.Arcane]
-		self.description = "Each turn where you have done at least 3 of these summon a horseman. Cast a spell for free, cast a spell while payings its costs, moved, and passed a turn."
+		self.description = "Each turn where you have done at least 3 of these summon a moon mage. Cast a spell for free, cast a spell while payings its costs, moved, or pass a turn."
 		self.owner_triggers[EventOnMoved] = self.on_move
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.advanced = False
@@ -1909,13 +2054,14 @@ class TheRiddle(Upgrade):
 		self.cast_free = False
 		self.cast_notfree = False
 
-
-class LightningReflexes(Upgrade):
+class SlimeScholar(Upgrade):
 	def on_init(self):
-		self.name = "Lightning Reflexes"
+		self.name = "SlimeScholar"
 		self.level = 0
-		self.tags = [Tags.Lightning]
-		self.description = "You can cast 2 extra quick cast spells each turn."
+		self.tags = [Tags.Arcane]
+		self.description = "For every X slimes summoned, summon a slime scholar. They can teach your slimes cantrips." ##Do something with living scrolls?
+
+
 
 
 # class Matryoshka(Upgrade):
@@ -1955,6 +2101,7 @@ def construct_skills():
 	skillcon = [FromAshes, Lucky13, PsionicBlast, Crescendo, Librarian, BoneShaping, Chiroptyvern, Condensation, AngularGeometry, Discharge, PoisonousCopy, 
 				IcyVeins, HolyMetalLantern, NightsightLantern, ContractFromBelow, MageArmor, Friction, Accelerator, ArclightEagle, Scrapheap, WeaverOfElements,
 				WeaverOfOccultism, WeaverOfMaterialism, Mathemagics, QueenOfTorment, Cloudcover, WalkTheOrb, EyeSpellTrigger, Overheal, RimeorbLantern,
-				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, ChaosLord]
+				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord]
+	##
 	for s in skillcon:
 		Upgrades.skill_constructors.extend([s])
