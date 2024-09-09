@@ -164,15 +164,14 @@ def LivingBloodScroll():
 
 ##--------------------Tiles--------------------
 
-class PoisonCloud(Cloud):
+class PoisonCloud_Old(Cloud): ##In case I want to keep the old method and remove the new form
 
 	def __init__(self, owner, damage=6):
 		Cloud.__init__(self)
 		self.owner = owner
-		self.duration = 4
+		self.duration = 6
 		self.damage = damage
 		self.color = Tags.Poison.color
-		self.strikechance = 1
 		self.name = "Poison Cloud"
 		self.description = "Every turn, deals %d poison damage to any creature standing within, then debuffs them." % self.damage
 		self.asset_name = 'poison_cloud'
@@ -180,13 +179,39 @@ class PoisonCloud(Cloud):
 		self.buff_turns = 3
 
 	def on_advance(self):
-		self.level.deal_damage(self.x, self.y, self.damage, Tags.Poison, self)
 		unit = self.level.get_unit_at(self.x, self.y)
 		if unit and unit.resists[Tags.Poison] < 100:
-			if self.buff == None:
-				unit.apply_buff(Poison(), self.buffs_turns)
-			else:
+			buff = copy.deepcopy(self.buff)
+			print(buff.name)
+			print(buff)
+			unit.apply_buff(Poison(), self.buff_turns)
+			if buff != None:
+				unit.apply_buff(buff, self.buff_turns)
+		self.level.deal_damage(self.x, self.y, self.damage, Tags.Poison, self)
+
+class PoisonCloud(Cloud):
+
+	def __init__(self, owner, damage=6):
+		Cloud.__init__(self)
+		self.owner = owner
+		self.duration = 6
+		self.damage = damage
+		self.color = Tags.Poison.color
+		self.name = "Poison Cloud"
+		self.description = "Every turn, deals %d poison damage to any creature standing within, then debuffs them." % self.damage
+		self.asset_name = 'poison_cloud'
+		self.buff = None
+		self.buff_turns = 3
+
+	def on_advance(self):
+		unit = self.level.get_unit_at(self.x, self.y)
+		if unit and unit.resists[Tags.Poison] < 100:
+			unit.apply_buff(Poison(), self.buff_turns)
+			if self.buff != None:
 				unit.apply_buff(self.buff, self.buff_turns)
+				self.buff = None
+		self.level.deal_damage(self.x, self.y, self.damage, Tags.Poison, self)
+
 
 class Hole(Cloud):
 
