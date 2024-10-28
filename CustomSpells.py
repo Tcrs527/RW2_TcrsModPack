@@ -77,7 +77,7 @@ class Improvise(Spell):
 				unit.turns_to_death = self.get_stat('minion_duration') * 7
 				#unit.turns_to_death = None ##Possibly last forever
 				self.summon(unit=unit,target=point,team=self.caster.team)
-				print(time.time())
+				#print(time.time())
 			if self.get_stat('swarm') and not u.is_alive():
 				buff = self.caster.get_buff(ImpCallBuff)
 				if buff == None:
@@ -806,7 +806,7 @@ class Haste(Spell):
 		for u in targets:
 			if count > 0:
 				if u.is_alive():
-					print(u.name)
+					#print(u.name)
 					count -= 1
 					buff = HasteBuff()
 					duration = 2
@@ -864,14 +864,14 @@ class EnchantingCross(Spell):
 		if self.get_stat('selfbuff'):
 			if self_spells == []:
 				return
-			print(self_spells[0].name)
+			#print(self_spells[0].name)
 			self_spell = random.choice(self_spells)
 			self.caster.level.act_cast(self.caster, self_spell, self.caster.x, self.caster.y, pay_costs=False)
 			
 		units = [self.caster.level.get_unit_at(p.x, p.y) for p in self.get_impacted_tiles(x, y)]
 		enemies = set([u for u in units if u and are_hostile(u, self.caster)])
 		pairs = list(itertools.product(enemies, targ_spells))
-		print(pairs)
+		#print(pairs)
 		random.shuffle(pairs)
 		
 		if spells == None or units == None:
@@ -1681,7 +1681,7 @@ class Amalgamate(Spell): ##TODO there's something wrong with this spell. I think
 			if unit == self.caster: continue
 			viable = False
 			if unit:
-				print(unit.name)
+				#print(unit.name)
 				for tag in unit.tags:
 					if tag in self.viable_tags:
 						viable = True
@@ -2153,7 +2153,7 @@ class MachinationBuff(Buff):
 			self.damage += evt.damage
 		
 	def on_death(self, evt):
-		print("Creating constructs out of: " + str(self.owner.max_hp))
+		#print("Creating constructs out of: " + str(self.owner.max_hp))
 		self.spell.convert_unit(self.owner, self.owner.max_hp + self.damage)
 
 class Machination(Spell):
@@ -2181,7 +2181,7 @@ class Machination(Spell):
 				"[Construct] or [Metallic] targets summon twice as many units.").format(**self.fmt_dict())
 
 	def cast_instant(self, x, y):
-		print("Cast Machination")
+		#print("Cast Machination")
 		u = self.caster.level.get_unit_at(x,y)
 		if u == None:
 			return
@@ -2212,8 +2212,8 @@ class Machination(Spell):
 			first = True
 			while damage > 5: ##This must be higher than the lowest hp in the list to avoid infinite looping, in this case 5
 				construct = copy.deepcopy(self.units[index])
-				print(construct.name)
-				print(damage)
+				#print(construct.name)
+				#print(damage)
 				if damage > construct.max_hp:
 					damage -= construct.max_hp
 					self.summon(construct, Point(u.x,u.y), sort_dist=False)
@@ -2483,7 +2483,7 @@ class ShieldOrb(OrbSpell):
 		pass
 
 	def on_make_orb(self, orb):
-		print(self.caster.name)
+		#print(self.caster.name)
 		orb.name = "Unbreakable Orb"
 		orb.asset =  ["TcrsCustomModpack", "Units", "shield_orb_axe"]
 		orb.tags.append(Tags.Metallic)
@@ -2668,7 +2668,7 @@ class HemortarBuff(Buff):
 				self.charges += 1
 
 	def on_advance(self):
-		print(self.charges)
+		#print(self.charges)
 		self.description = "Blood Charges %d\n" % self.charges
 		if self.charges >= 1:
 			self.charges -= 1
@@ -2693,7 +2693,7 @@ class HemortarBuff(Buff):
 			if possible_targets:
 				random.shuffle(possible_targets)
 				target = max(possible_targets, key=lambda t: distance(t, self.owner))
-				print(target.name)
+				#print(target.name)
 				self.owner.level.act_cast(self.owner, spell, target.x, target.y, pay_costs=False)
 				
 class Hemortar(Spell):
@@ -2758,7 +2758,7 @@ class IcyBeastCurse(Buff):
 			
 	def on_advance(self):
 		self.count -= 1
-		print(self.count)
+		#print(self.count)
 		if self.count <= 0:
 			if self.spell.get_stat('hunger'):
 				self.owner.remove_buffs(RegenBuff)
@@ -2858,7 +2858,7 @@ class Cloudwalk(Spell):
 				return False
 		cloud = self.caster.level.tiles[x][y].cloud
 		if type(cloud) in self.clouds:
-			print(cloud)
+			#print(cloud)
 			cloud = True
 		return Spell.can_cast(self, x, y) and self.caster.level.can_move(self.caster, x, y, teleport=True) and cloud
 
@@ -2921,8 +2921,8 @@ class RainbowSealBuff(Buff):
 			pctdmg = math.floor(enchdmg_pct / 25)
 			damage += flatdmg
 			damage += pctdmg
-			print(flatdmg)
-			print(enchdmg_pct)
+			#print(flatdmg)
+			#print(enchdmg_pct)
 			
 		count = 1
 		if self.spell.get_stat('double'):
@@ -3136,7 +3136,7 @@ class ChainJump(Upgrade):
 			if u != None:
 				dmg = evt.spell.get_stat('damage')
 				dmg = dmg * (100 - u.resists[Tags.Holy]) / 100
-				print(dmg)
+				#print(dmg)
 				if dmg >= u.cur_hp and u.shields == 0:
 					evt.spell.quick_cast = 1
 					self.spell = evt.spell
@@ -3703,7 +3703,7 @@ class AnimateClutter(Spell): ##TODO this will need to update for evermelting ice
 					spell.statholder = unit
 					unit.spells.append(spell)
 				if self.get_stat('selfequip'):
-					print(t)
+					#print(t)
 					split_str = (t.name.lower().split(' '))
 					if not len(split_str) == 1:
 						if split_str[1] == 'pipe':
@@ -3731,7 +3731,7 @@ class AnimateClutter(Spell): ##TODO this will need to update for evermelting ice
 				asset = ["TcrsCustomModpack", "Units", "AnimateTrinket" , n + "_anim"]
 
 				path = os.path.join(os.path.curdir, "mods\\TcrsCustomModpack\\Units\\AnimateTrinket\\" + n + "_anim.png")
-				print(path)
+				#print(path)
 				if not os.path.exists(path):
 					asset = ["TcrsCustomModpack", "Units", "AnimateTrinket" , "animated_teapot"] ##Real fantasia vibes here
 				asset_list.append(asset)
@@ -3790,14 +3790,14 @@ class HP_X_Damage(Spell):
 			divisor = abs(diffx)
 			
 		units = list(self.caster.level.units)
-		print(divisor)
+		#print(divisor)
 		for unit in units:
 			if unit.cur_hp % divisor == 0:
 				unit.deal_damage(self.get_stat('dmg') * divisor, Tags.Arcane, self)
 			if self.get_stat('threeseven') and (unit.cur_hp % 10 == 7 or unit.cur_hp % 10 == 3):
 				unit.deal_damage(self.get_stat('dmg') * divisor, Tags.Arcane, self)
 			if self.get_stat('prime') and not self.isprime(unit.cur_hp):
-				print("Found prime guy")
+				#print("Found prime guy")
 				unit.deal_damage(self.get_stat('dmg') * divisor, Tags.Arcane, self)
 			unit.apply_buff(Silence(),3)
 				
@@ -3864,7 +3864,7 @@ class Overload(Spell):
 				self.caster.level.deal_damage(u.x, u.y, self.get_stat('damage'), Tags.Arcane, self)
 			if not u.is_alive() and self.get_stat('electrify'):
 				kills += 1
-		print(kills)
+		#print(kills)
 				
 		# if self.get_stat('electrify'):
 		# 	allies = [a for a in self.caster.level.units if not are_hostile(a, self.caster) and not Tags.Lightning in a.tags and not a.is_player_controlled]
@@ -3926,13 +3926,13 @@ class UtterDestruction(Spell):
 		
 		damage = self.get_stat('damage')
 		count = random.randint(damage, damage * 10)
-		print(count)
-		print(len(self.tiles))
-		print(self.tile_index)
+		#print(count)
+		#print(len(self.tiles))
+		#print(self.tile_index)
 		for i in range(count):
 			if self.tile_index == len(self.tiles) - 1:
 				self.tile_index = 0
-				print("End of stage")
+				#print("End of stage")
 				if self.get_stat('dedication'):
 					spell = self.caster.get_or_make_spell(Spells.HeavensWrath)
 					self.caster.level.act_cast(self.caster, spell, x, y, pay_costs=False, queue=True)
@@ -4172,7 +4172,7 @@ class TheSecondSeal(Spell):
 
 	def cast(self, x, y, channel_cast=False):
 		if not channel_cast:
-			print("summoned rider")
+			#print("summoned rider")
 			unit = RedRiderMod()
 			if self.get_stat('lasting'):
 				duration = self.get_stat('duration', base=3)
