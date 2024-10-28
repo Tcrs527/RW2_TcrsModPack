@@ -55,7 +55,7 @@ class Librarian(Upgrade):
 			if len(maintags) > 1:
 				random.shuffle(maintags)
 			randtag = maintags[0]
-			print(randtag.name)
+			#print(randtag.name)
 			self.owner.level.queue_spell(self.make_scrolls(randtag))
 
 class BoneShaping(Upgrade):
@@ -451,7 +451,7 @@ class Discharge(Upgrade):
 		self.activated = False
 	
 	def on_enter_level(self, evt):
-		print(evt.unit.name)
+		#print(evt.unit.name)
 		if evt.unit != self.owner:
 			return
 		self.charges = 0
@@ -551,7 +551,7 @@ class PoisonousCopy(Upgrade):
 		if self.copies > 10: ##If you get in a loop of casting fire spells on poisoned fire immune enemies, break if you reach this point 10 times.
 			return
 		
-		print(self.copies)
+		#print(self.copies)
 		copy_targets = [u for u in self.owner.level.units if are_hostile(self.owner, u) and u != unit]
 		target = random.choice(copy_targets)
 		self.copies += 1
@@ -575,10 +575,10 @@ class IcyVeins(Upgrade):
 		#if isinstance(s, Spell)
 		
 	def on_damaged(self, evt):
-		print("Source Name:")
-		print(evt.source.name)
-		print("Source Owner")
-		print(evt.source.owner.name)
+		#print("Source Name:")
+		#print(evt.source.name)
+		#print("Source Owner")
+		#print(evt.source.owner.name)
 		if evt.damage_type != Tags.Ice:
 			return
 		self.iceblood += evt.damage
@@ -797,11 +797,11 @@ class ContractFromBelow(Upgrade):
 		if evt.unit == self.owner:
 			self.demons = {}
 		else:
-			print(evt.unit.name)
+			#print(evt.unit.name)
 			if not self.owner.level.are_hostile(self.owner, evt.unit) and Tags.Demon in evt.unit.tags:
 				self.demons[evt.unit.name] = True
 				if len(self.demons.keys()) >= 5:
-					print(self.demons.keys())
+					#print(self.demons.keys())
 					self.owner.apply_buff(ContractFromBuff(self))
 					
 
@@ -908,9 +908,9 @@ class WeaverOfElements(Upgrade):
 			for tag in evt.spell.tags:
 				if tag not in self.spell_tags and tag in self.tags:
 					self.spell_tags.append(tag)
-			print(self.points)
-			print(self.spell_tags)
-			print(len(self.points))
+			#print(self.points)
+			#print(self.spell_tags)
+			#print(len(self.points))
 			wizard_p = Point(self.owner.x, self.owner.y)
 			if len(self.points) >= 3:
 				if self.spell_tags == []:
@@ -1192,7 +1192,7 @@ class Mathemagics(Upgrade):
 
 	def on_advance(self):
 		if not self.owner.has_buff(Arithmetic):
-			print(self)
+			#print(self)
 			#difficulty = self.owner.level.gen_params.difficulty
 			self.owner.apply_buff(Arithmetic(self))
 
@@ -1454,12 +1454,12 @@ class RimeorbMainBuff(Buff):
 		o.apply_buff(buff, o.turns_to_death)
 			
 	def on_unapplied(self):
-		print("Unapply")
+		#print("Unapply")
 		self.owner.remove_buffs(RimeorbDamageBuff)
 		orbs = [t for t in self.owner.level.units if not self.owner.level.are_hostile(t, self.owner) and t.name[-4:] == " Orb" and t.has_buff(RimeorbDamageBuff)]
 		if orbs == []:
 			return
-		print(orbs)
+		#print(orbs)
 		for o in orbs:
 			o.remove_buffs(RimeorbDamageBuff)
 
@@ -1590,18 +1590,18 @@ class AuraReading(Upgrade):
 
 	def buff_applied(self, evt):
 		if isinstance(evt.buff, DamageAuraBuff) and evt.buff.name != "Physical Aura": ##TODO check to see if enemy auras grant them a version of this. I think it will.
-			print("Applying Buff")
+			#print("Applying Buff")
 			buff = DamageAuraBuff(damage=2, radius=evt.buff.radius, damage_type=[Tags.Physical], friendly_fire=False)
 			buff.stack_type = STACK_REPLACE
 			buff.color = Tags.Physical.color
 			buff.name = "Physical Aura"
 			buff.source = self
 			evt.unit.apply_buff(buff, evt.buff.turns_left)
-			print("Buff Applied")
+			#print("Buff Applied")
 
 	def buff_removed(self, evt):
 		if isinstance(evt.buff, DamageAuraBuff):
-			print(evt.buff.damage_dealt)
+			#print(evt.buff.damage_dealt)
 			self.spawn_pachyderm(evt.buff.damage_dealt)
 		
 	def on_advance(self):
@@ -1729,7 +1729,7 @@ class Triskadecaphobia(Upgrade):
 
 	def on_advance(self):
 		dist = round( distance(Point(self.lastx, self.lasty), Point(self.owner.x, self.owner.y)) , 0)
-		print(dist)
+		#print(dist)
 		self.tiles += dist
 		self.lastx = self.owner.x
 		self.lasty = self.owner.y
@@ -1830,8 +1830,8 @@ class VoidCaller(Upgrade):
 			return
 		if not hasattr(evt.source, 'tags'):
 			return
-		print(evt.source)
-		print(evt.source.name)
+		#print(evt.source)
+		#print(evt.source.name)
 
 		is_tagged_summon = False
 		if evt.source.owner:
@@ -1916,13 +1916,11 @@ class LightningReflexes(Upgrade):
 	def on_cast(self, evt):
 		if evt.pay_costs == False:
 			return
-		print(self.owner.quick_cast_used)
 		self.counter += 1
 		if self.counter < 2 + self.get_stat('num_targets'): ## 1st, 2nd, spell are the ones this adds, 3rd is your normal quick cast spell, and the 4th ends your turn.
 			self.owner.quick_cast_used = False
 			return
 		self.owner.quick_cast_used = True
-		print(self.owner.quick_cast_used)
 	
 	def on_advance(self):
 		self.counter = 0
