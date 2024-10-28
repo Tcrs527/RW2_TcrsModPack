@@ -26,60 +26,6 @@ print("Custom Spells Loaded")
 ##		Make the earliest icons like metal shard not use the old style icon which flashes between 7 frames
 ##		Use raise_elemental (CommonContent.py) to do something cool.
 
-class SummonArmor(Spell): ##Very explicitly for testing stuff, obviously not a balanced spell
-	
-	def on_init(self):
-		self.name = "Summoning Debug Spell"
-		self.range = 5
-		self.max_charges = 99
-		self.tags = [Tags.Conjuration, Tags.Metallic, Tags.Chaos]
-		self.level = 1
-
-		#self.asset_name
-		self.minion_health = 50
-		self.minion_damage = 5
-		self.minion_range = 5
-
-		self.must_target_empty = False
-		#Robes.append(RobeOfDebug) ##Obviously remove this lol
-
-	def cast_instant(self, x, y):
-		self.caster.xp = self.caster.xp + 10
-		#u = self.caster.level.get_unit_at(x,y)
-		#print(u.team)
-		#u.apply_buff(ClarityBuff(),5)
-		
-		#for a in dir()
-		#	print(a)
-		
-		item = Equip.Amulets[-1]()
-		#item = lambda : Equipment.JarOfBossness("Jar of Trollblood", BossSpawns.Trollblooded)
-		
-		print(item)
-		#item = PetSigil(lambda : QueenMonster(GiantSpider))
-		self.caster.equip(item)
-		
-		#spell = SimpleSummon(lambda : QueenMonster(GiantSpider), num_summons=1, cool_down=10, duration=0, sort_dist=False)
-		#spell.owner = self.caster
-		#spell.caster = self.caster
-		#spell.statholder = self.caster
-		#self.caster.spells.append(spell)
-
-		#unit = IdolOfUndeath()
-		#unit.radius = 1
-		#unit.asset =  ["TcrsCustomModpack", "Units", "cantrip_brocade"]
-		#self.summon(unit, Point(x, y))
-		#unit.team = 1
-
-		#fire_spell = self.caster.spells[0]
-		#fire_spell.statholder = self.caster
-		#unit.spells.insert(0, fire_spell)
-
-	def get_description(self):
-		return ("Summon a test unit DEBUG").format(**self.fmt_dict())
-
-	def get_extra_examine_tooltips(self):
-		return [Wolf()]
 
 class Improvise(Spell):
 	def on_init(self):
@@ -198,7 +144,7 @@ class MetalShard(Spell):
 
 	def cast(self, x, y):
 		#if self.caster.name == "Wizard":
-		#	self.caster.xp = self.caster.xp + 3 ##Remove during real game, for testing TODO
+		#	self.caster.xp = self.caster.xp + 3 ##Free xp for testing, comment out for real game.
 		bolts = [(self.caster, Point(x, y))]
 		ubw_bonus = 0
 		if self.get_stat('UBW') and self.cur_charges > 1:
@@ -238,14 +184,6 @@ class MetalShard(Spell):
 
 	def get_description(self):
 		return "Launch a bouncing projecting dealing [{damage}_physical:physical] damage to [{num_targets}:num_targets] targets. Bounce range is half of base range.".format(**self.fmt_dict())
-
-	def can_pay_costs(self): ##For testing purposes, this spell is useable while silenced. TODO remove for real game.
-		if self.caster.is_stunned():
-			return False
-		if self.max_charges:
-			if self.cur_charges <= 0:
-				return False
-		return True
 
 class CauldronBuff(Buff):
 
@@ -531,7 +469,7 @@ class FlyWheel(Spell):
 		points = [p for p in points if p != Point(self.caster.x, self.caster.y) and distance(self.caster, p) >= self.radius - 1]
 		return points
 
-	def get_extra_examine_tooltips(self):
+	def get_extra_examine_tooltips(self): ##TODO fix the flycloud and giant bag of bugs
 		return [BagOfBugs(), FlyCloud(), self.spell_upgrades[0], BagOfBugsBrain(), BrainFlies(), self.spell_upgrades[1], BagOfBugsGiant(), self.spell_upgrades[2]]
 
 	def get_description(self):
@@ -578,7 +516,7 @@ class Rockfall(Spell):
 			quake = self.caster.get_or_make_spell(Spells.EarthquakeSpell)
 			for _ in self.caster.level.act_cast(self.caster, quake, self.caster.x, self.caster.y, pay_costs=False, queue=False):
 				pass
-		if cur_tile.is_wall() and self.get_stat('walleater'): ##TODO update this to include any wall tile in the aoe not just the center.
+		if cur_tile.is_wall() and self.get_stat('walleater'): ##TODO buff this to include any wall tile in the aoe not just the center? Is it too weak?
 			sentinel = self.caster.get_or_make_spell(Spells.SummonEarthElemental)
 			self.caster.level.make_floor(x, y)
 			for _ in self.caster.level.act_cast(self.caster, sentinel, x, y, pay_costs=False, queue=False):
@@ -2749,7 +2687,7 @@ class HemortarBuff(Buff):
 					return
 				spell = random.choice(spells)
 
-			possible_targets = self.owner.level.units ##TODO line of sight
+			possible_targets = self.owner.level.units ##TODO line of sight, works weirdly with cone spells
 			possible_targets = [t for t in possible_targets if self.owner.level.are_hostile(t, self.owner)]
 			possible_targets = [t for t in possible_targets if self.owner.level.can_see(t.x, t.y, self.owner.x, self.owner.y)] ##Check this line
 			if possible_targets:
@@ -3195,7 +3133,7 @@ class ChainJump(Upgrade):
 	def on_spell_cast(self, evt):
 		if evt.spell.name == "Cavalier's Warp":
 			u = self.owner.level.get_unit_at(evt.x, evt.y)
-			if u != None: ##TODO make sure this checks to see if the unit dies or else it's just quickcast forever for free.
+			if u != None:
 				dmg = evt.spell.get_stat('damage')
 				dmg = dmg * (100 - u.resists[Tags.Holy]) / 100
 				print(dmg)
@@ -3234,7 +3172,7 @@ class KnightlyLeap(Spell):
 		self.upgrades['mole'] = (1, 4, "Burrowing Jump", "Can target walls, melting them if necessary. (It is possible to trap yourself)")
 		
 	def get_description(self):
-		return ("Teleport to target location up to 3 tiles away in an L-shape.\n"
+		return ("Teleport to target location exactly 3 tiles away in an L-shape.\n"
 				"If there is a unit there, it takes [{damage}_holy:holy] damage, and you attempt to displace it one tile, then teleport to its tile."
 				" If it can't be moved or did not die to the damage, you don't teleport.").format(**self.fmt_dict())
 
@@ -3728,6 +3666,8 @@ class AnimateClutter(Spell): ##TODO this will need to update for evermelting ice
 		self.tagdict[Tags.Metallic] = MetalShard,LivingMetalScroll()
 		self.tagdict[Tags.Chaos] = Improvise,LivingChaosScroll()
 
+	##TODO make generic nick-nack show up on the spell
+
 	def get_description(self):
 		return ("Animate your trinkets into allies. Each trinket is a flying, teleporting, melee attacker which "
 				"deals [{minion_damage}_physical:physical] damage and has [{minion_health}_HP:minion_health] and 3 shields.").format(**self.fmt_dict())
@@ -4030,7 +3970,7 @@ class DominoeAttack(Spell):
 		self.upgrades['bones'] = (1, 2, "Throw the bones", "Each struck unit has a 1/6 chance of summoning a Bone Knight")
 		self.upgrades['dominator'] = (1, 3, "Fives and Threes", "If exactly 3 or a multiple of 3 units are targeted, cast your Dominate on 5 viable enemies.")
 
-		##TODO Determine if I should allow horizontal only leaps for when things bunch up in corners. Would greatly improve the utility of the spell.
+		##TODO Determine if I should allow horizontal only leaps for when things bunch up in corners. Would greatly improve the utility of the spell across corners.
 
 	def get_description(self):
 		return ("Deal [{damage}_fire:fire] to one unit in melee range, and then repeat on one enemy unit adjacent to the target."
@@ -4261,283 +4201,14 @@ class TheSecondSeal(Spell):
 		apply_minion_bonuses(self, dog)
 		return dog
 
-## ------------------------- TODO The Unimplemented Zone -------------------------
-
-# class Prop(object):
-
-# 	def on_player_enter(self, player):
-# 		pass
-
-# 	def on_unit_enter(self, unit):
-# 		pass
-
-# 	def on_player_exit(self, player):
-# 		pass
-
-# 	def advance(self):
-# 		pass
-
-# 	def __reduce__(self):
-# 		self.Sprite = None
-# 		return object.__reduce__(self)
-
-class Landmine_Prop(Prop):
-	def __init__(self, source):
-		self.name = "Landmine"
-		self.asset = ['tiles', 'thunderstone']
-		self.damage = 5
-		self.damage_type = Tags.Lightning
-		self.source = source
-
-	def on_unit_enter(self, unit):
-		unit.level.deal_damage(unit.x, unit.y, self.damage, self.damage_type, self.source)
-		self.level.remove_obj(self)
-
-
-class Landmines(Spell):
-	def on_init(self):
-		self.name = "Landmines"
-		self.description = "Violate the geneva convention."
-		self.level = 1
-		self.tags = [Tags.Lightning, Tags.Sorcery]
-
-		self.damage = 14
-		self.max_charges = 12
-		self.range = 99
-
-	def can_target(self, p):
-			tile = self.caster.level.tiles[p.x][p.y]
-			if tile.prop:
-				return False
-			if not tile.can_walk:
-				return False
-			return True
-
-	def cast_instant(self, x, y):
-		if not self.can_target(Point(x,y)):
-			return
-		prop = Landmine_Prop(self)
-		prop.damage = self.get_stat('damage')
-		self.caster.level.add_obj(prop, x, y)
-
-
-class MitreMovement(Spell):
-	def on_init(self):
-		self.name = "Mitre Movement" ##This spell's goal will be pretty obviously.
-		self.level = 1
-		self.tags = [Tags.Holy, Tags.Sorcery, Tags.Translocation]
-		
-		self.requires_los = True
-		self.range = 99
-		self.max_charges = 5
-
-class EyeofSchroedinger(Spell):
-	def on_init(self):
-		self.name = "Unseen Eye"
-		self.tags = [Tags.Enchantment, Tags.Dark, Tags.Eye]
-		self.level = 1
-		self.max_charges = 1
-
-##Mindforge Metal? Forge Sanctity. Something to do with Tubalcain?
-class DivineTemperance(Spell):
-	pass
-
-class Blackhole(Spell):
-	def on_init(self):
-		self.name = "Black Hole"
-		self.tags = [Tags.Dark, Tags.Conjuration, Tags.Orb]
-		self.level = 1
-		self.description = "Creates a black orb at target location which sucks in nearby units each turn."
-		
-class Flamerush(Spell):
-	def on_init(self):
-		self.name = "Flame Rush"
-		self.tags = [Tags.Fire, Tags.Sorcery, Tags.Translocation]
-		self.level = 1
-		self.description = "Teleport to target location leaving fire clouds in your wake."
-
-
-class ClockworkSoldier(Spell):
-	def on_init(self):
-		self.name = "Clockwork Soldier"
-		self.tags = [Tags.Conjuration]
-		self.level = 1
-		self.description = "Summons a clockwork soldier, which pauses every 2 turns to wind up."
-
-class Voraxx(Spell):
-	def on_init(self):
-		self.name = "Invasive Thorflax"
-		self.tags = [Tags.Lightning, Tags.Nature, Tags.Conjuration]
-		self.level = 1
-		self.description = "Summon an invasive weed, which doubles itself the first time each turn it takes lightning damage."
-
-class Mogui(Spell):
-	def on_init(self):
-		self.name = "Mogui"
-		self.tags = [Tags.Dark, Tags.Conjuration]
-		self.level = 1
-		self.description = "A minion which creates a copy of itself if it ends its turn in a thundercloud or blizzard."
-
-class DustBiter(Spell):
-	def on_init(self):
-		self.name = "Dustbiter"
-		self.tags = [Tags.Conjuration]
-		self.level = 1
-		self.description = "A minion which exists primarily to die. What use does it have?"
-
-class WordOfSilence(Spell):
-	def on_init(self):
-		self.name = "Word of Silence"
-		self.tags = [Tags.Dark, Tags.Word]
-		self.level = 1
-		self.description = "Silence every unit on the map for X turns where X is the number of spells they know. Then summon a ghost for each spell they knew."
-
-class EnchantmentSigil(Spell):
-	def on_init(self):
-		self.name = "Enchantment Sigil"
-		self.tags = [Tags.Enchantment, Tags.Metallic]
-		self.level = 1
-		self.description = "Gain Enchantment Sigil for X turns. When the buff expires, cast every enchantment spell you cast during this period, on 2 random enemies."
-
-# class GlobalAttrBonus(Buff):
-
-# 	def __init__(self, attr, bonus):
-# 		Buff.__init__(self)
-# 		self.attr = attr
-# 		self.bonus = bonus
-# 		self.global_bonuses[attr] = bonus
-# 		self.buff_type = BUFF_TYPE_BLESS
-
-#		buff = GlobalAttrBonus('damage', 7)
-#		buff.stack_type = STACK_DURATION if not self.get_stat('stackable') else STACK_INTENSITY
-#		self.caster.apply_buff(buff, self.get_stat('duration'))
-
-
-
-#class InvokeBaseSpell(Spell):
-#	def on_init(self):
-#		self.name = "Invoke"
-#		self.tags = [Tags.Sorcery, Tags.Enchantment, Tags.Conjuration]
-#		self.level = 6
-
-# class RobeTesting(Spell):
-	
-# 	def on_init(self):
-# 		self.name = "DEBUG"
-# 		self.range = 1
-# 		self.tags = [Tags.Eye]	
-
-# 	def on_cast(self, evt):
-# 		if self.caster.equipment.get(ITEM_SLOT_ROBE):
-# 			#armor = type(self.owner.equipment[ITEM_SLOT_ROBE])()
-# 			#unit.equip(armor)
-# 			robe = self.caster.equipment[ITEM_SLOT_ROBE]
-# 			self.caster.remove_buff(robe)
-# 			robe.resists[Tags.Poison] = 32
-# 			self.caster.apply_buff(robe)
-
-
-class corruptionTest(MordredCorruption):
-	def on_init(self):
-		self.name = "Corrupt"
-		self.tags = [Tags.Conjuration]
-		self.level = 1
-		self.description = "Placeholder"
-		self.num_exits = 3
-		self.cool_down = 1
-		self.range = 0
-		self.forced_difficulty = None
-		self.kill_enemies = False
-
-	def cast(self, x, y):
-		self.caster.cur_hp = random.randint(1, self.caster.max_hp+1)
-		for s in self.caster.spells:
-			s.cur_charges = random.randint(0, s.get_stat('max_charges')+1)
-		
-		yield
-
-		for _ in MordredCorruption.cast(self, x, y):
-			yield
 
 def construct_spells():
 	spellcon = [MetalShard, CorpseExplosion, FlyWheel, Rockfall, Improvise, Absorb, Haste, BloodOrbSpell, EnchantingCross, Icepath,
 				SummonBookwyrm, Exsanguinate, Grotesquify, WordoftheSun, WordofFilth, HolyBeam, Amalgamate, SummonCauldron, OccultBlast,
 				RingofFishmen, CallBerserker, ChaosBolt, Machination, Skulldiggery, SummonEyedra, ShieldOrb, PoisonousGas, Hemortar, SummonIcyBeast,
 				RainbowSeal, SteelFangs, Leapfrog, KnightlyLeap, SummonChaosBeast, BeckonCowardlyLion, PowerShift, Icebeam, TreeFormSpell,
-				AnimateClutter, HP_X_Damage, Overload, UtterDestruction, DominoeAttack, UnstableSpellStorm, Cloudwalk, TheSecondSeal, SummonArmor
+				AnimateClutter, HP_X_Damage, Overload, UtterDestruction, DominoeAttack, UnstableSpellStorm, Cloudwalk, TheSecondSeal
 				 ## , MirrorShield, PortableHole, Landmines, , TidesofWoe,
 				]
 	for s in spellcon:
 		Spells.all_player_spell_constructors.append(s)
-		
-##
-
-# class Fling(Spell):
-# 	def on_init(self):
-# 		self.name = "Fling"
-# 		self.range = 10
-# 		self.max_charges = 5
-# 		self.tags = [Tags.Translocation, Tags.Sorcery]
-# 		self.level = 1
-# 		self.cast_on_walls = True
-# 		self.radius = 2
-# 		self.num_targets = 2
-		
-# 	def can_cast(self,x,y):
-# 		return Spell.can_cast(self, x, y) and self.caster.level.can_move(self.caster, x, y, teleport=True)
-	
-# 	def cast(self,x,y):
-# 		nearby_units = self.caster.level.get_units_in_ball(self.caster, self.get_stat('radius'))
-# 		targets = []
-# 		enemies = self.get_stat('num_targets')
-# 		for u in nearby_units:
-# 			self.caster.level.show_effect(u.x, u.y, Tags.Translocation)
-# 			if not are_hostile(u,self.caster):
-# 				if not u:
-# 					continue
-# 				if u == self.caster:
-# 					continue
-# 				if not u.can_teleport:
-# 					continue
-# 				targets.append(u)
-# 			elif enemies > 0:
-# 				enemies -= enemies
-# 				targets.append(u)
-				
-# 		points = self.caster.level.get_points_in_ball(x, y, self.get_stat('radius'))
-# 		for p in points:
-# 			for u in targets:
-# 				if self.caster.level.can_stand(p.x, p.y, u):
-# 					self.caster.level.act_move(u, p.x, p.y, teleport=True)
-# 		yield
-
-# 	def get_description(self):
-# 		return ("Teleports up to 2 nearby enemies and all nearby allies to target point".format(**self.fmt_dict()))
-	
-# 	def get_impacted_tiles(self, x, y):
-# 		return [p for p in self.caster.level.get_points_in_ball(x, y, self.get_stat('radius'))]
-
-# class PortableHole(Spell): ##Tile testing spell
-			
-# 	def on_init(self):
-# 		self.name = "Portable Hole"
-# 		self.tags = [Tags.Enchantment]
-# 		self.level = 1
-# 		self.description = "DEBUG"
-		
-# 	def cast_instant(self,x,y):
-# 		hole = Hole()
-# 		hole.owner = self.caster
-# 		self.caster.level.add_obj(hole,x,y)
-
-# class RobeOfDebug(Equipment): ##Equipment testing
-# 	def on_init(self):
-# 		self.slot = ITEM_SLOT_ROBE
-# 		self.name = "Robe of Debugging"
-# 		self.asset_name = "TcrsCustomModpack.Icons.improvise"
-
-# 		self.resists[Tags.Fire] = 50
-# 		self.resists[Tags.Ice] = 25
-		
-# 	def get_asset(self):
-# 		return ["TcrsCustomModpack", "Icons", "discharge"]
