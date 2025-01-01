@@ -1,3 +1,4 @@
+from threading import main_thread
 import Spells
 import copy
 from Level import *
@@ -5,6 +6,8 @@ from Monsters import *
 from CommonContent import *
 
 print("General Content Loaded")
+
+##Testing new tag changes, will require changing reverse_tag_key() in RiftWizard2.py TODO
 
 ##--------------------Tag Things--------------------
 
@@ -199,7 +202,7 @@ class PoisonCloud(Cloud):
 		self.color = Tags.Poison.color
 		self.name = "Poison Cloud"
 		self.description = "Every turn, deals %d poison damage to any creature standing within, then debuffs them." % self.damage
-		self.asset_name = 'poison_cloud'
+		self.asset = ['TcrsCustomModpack', 'Tiles' ,'poison_cloud']
 		self.buff = None
 		self.buff_turns = 3
 

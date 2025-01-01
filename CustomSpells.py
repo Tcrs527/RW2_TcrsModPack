@@ -1,5 +1,3 @@
-from ast import Lambda
-import queue
 import sys
 import os.path
 
@@ -26,6 +24,7 @@ print("Custom Spells Loaded")
 ##		Make the earliest icons like metal shard not use the old style icon which flashes between 7 frames
 ##		Use raise_elemental (CommonContent.py) to do something cool.
 
+water_tag = Tag("Water", Color(14,14,250)) ##Purely for cross-mod compatibility
 
 class Improvise(Spell):
 	def on_init(self):
@@ -41,7 +40,7 @@ class Improvise(Spell):
 		self.minion_duration = 7
 		self.minion_damage = 3
 		self.minion_range = 3
-		
+
 		self.upgrades['swarm'] = (1, 5, "Swarming", "If the target dies to Improvise, gain your imp swarm buff for 2 turns, or extend it by 2 turns.")
 		self.upgrades['nightmare'] = (1, 3, "Nightmare", "Improvise also summons one void imp, or one rot imp, at the target location")
 		self.upgrades['promote'] = (1, 7, "Demonic Promotion", "Target an imp to transform it into a fiend. Fiends last 7 times longer than imps. Consumes 7 more charges.")
@@ -1443,7 +1442,7 @@ class WordofFilth(Spell):
 					u.max_hp = self.get_stat('minion_health') / 2
 					u.spells[0].damage = self.get_stat('minion_damage') / 2
 				else:
-					u = GoatHead() ##For debugging, this should never be reached but for some reason it is.
+					u = GoatHead() ##TODO this was reached once and it confused me.
 
 				if u != None:
 					duration = random.randint(1, self.get_stat('minion_duration'))
@@ -1947,6 +1946,7 @@ class RingofFishmen(Spell):
 		self.minion_damage = 8
 		self.num_summons = 4
 		self.must_target_empty = True
+		self.must_target_walkable = True
 
 		self.upgrades['archerfish'] = (1, 4, "Archerfish", "Fishmen are replaced by Archerfish men which have long ranged ice attack with a cooldown.")
 		self.upgrades['catfish'] = (1, 2, "Catfish", "Fishmen are replaced by Catfish men which reincarnate once upon dying, and deal dark damage.")
@@ -2401,7 +2401,7 @@ def Eyedra(heads=1):
 
 class SummonEyedra(Spell):
 	def on_init(self):
-		self.name = "Release The Eyedra"
+		self.name = "Release the Eyedra"
 		self.tags = [Tags.Arcane, Tags.Dragon, Tags.Conjuration, Tags.Eye]
 		self.level = 7 ##Tentative level 5 or 6, starts off whatever and scales very well. Can't be cast multiple times like other conjurations
 		self.asset = ["TcrsCustomModpack", "Icons", "eyedra_icon"]
@@ -2585,7 +2585,7 @@ class PoisonousGas(Spell): #Based on "Bleezy"'s idea of a spell with constant vo
 		self.damage = 10
 		self.duration = 6
 
-		self.upgrades['slime'] = (1, 4, "Gooify", "All non [slime] units in the initial area get the gooify debuff, spawning a slime when they die. Inherits slime form upgrades.")
+		self.upgrades['slime'] = (1, 4, "Gooify", "All non [slime] units in the initial cast area get the gooify debuff, spawning a slime when they die. Inherits slime form upgrades.")
 		self.upgrades['mercury'] = (1, 4, "Phenylmercury", "Each cloud gives your mercurize debuff to the first unit it damages for [5:duration] turns.")
 		self.add_upgrade(FungalSpores())
 
@@ -2593,16 +2593,20 @@ class PoisonousGas(Spell): #Based on "Bleezy"'s idea of a spell with constant vo
 		return ("Creates poison clouds in a [{radius}_tile:radius] tile area for 6 turns. The area starts from the center tile and spreads in each direction.\n"
 				"Poison clouds deal [{damage}_poison:poison] damage per turn to units, and poisons non-immune units for [{duration}_turns:duration] turns.").format(**self.fmt_dict())
 
+	def make_cloud(self, caster):
+		cloud = PoisonCloud(caster, 9)
+		cloud.source = self
+		cloud.spell = self
+		cloud.buff_turns = self.get_stat('duration')
+		if self.get_stat('mercury'):
+			spell = self.caster.get_or_make_spell(MercurizeSpell)
+			buff = MercurizeBuff(spell)
+			cloud.buff = buff
+		return cloud
+
 	def cast(self, x, y):
 		for t in self.get_impacted_tiles(x,y):
-			cloud = PoisonCloud(self.caster, 9)
-			cloud.source = self
-			cloud.spell = self
-			cloud.buff_turns = self.get_stat('duration')
-			if self.get_stat('mercury'):
-				spell = self.owner.get_or_make_spell(MercurizeSpell)
-				buff = MercurizeBuff(spell)
-				cloud.buff = buff
+			cloud = self.make_cloud(self.caster)
 			self.caster.level.add_obj(cloud, t.x, t.y)
 			
 			if self.get_stat('slime'):
@@ -3025,7 +3029,7 @@ class SteelFangs(Spell):
 	def get_description(self):
 		return ("Target minion gains [{damage}_damage:damage] to their breath attack, scaling with this spell's damage stat, "
 				"and its other attacks gain [{breath_damage}_damage:breath_damage] bonus damage scaling with this spell's breath damage.\n "
-				"Target minion then becomes a [metallic] and [dragon], and gains 25 hp.").format(**self.fmt_dict())
+				"Target minion then gains the [metallic] and [dragon] tags, and 25 max hp.").format(**self.fmt_dict())
 
 	def cast(self, x, y):
 		unit = self.caster.level.get_unit_at(x, y)
@@ -3319,7 +3323,7 @@ class SummonChaosBeast(Spell):
 	def get_description(self):
 		return ("Summons a Chaotic Snakeball, which gains max hp when it takes: [Physical], [Fire], or [Lightning] damage, equal to the damage taken.\n"
 				"The Snakeball has [{minion_health}_HP:minion_health] and deals [{minion_damage}_damage:minion_damage] with its melee attack.\n"
-				"On death it summons 1 snake for each 9 max hp it had. These snakes last 8 turns.").format(**self.fmt_dict())
+				"On death it summons 1 snake for each 9 max hp it had. These snakes last [{minion_duration}_turns:minion_duration] turns.").format(**self.fmt_dict())
 	
 	def get_extra_examine_tooltips(self):
 		return [ChaosBeast(), Snake(), FireSnake(), GoldenSnake(), self.spell_upgrades[0], self.spell_upgrades[1], SerpentPhilosopher(), self.spell_upgrades[2], StarfireSnakeGiant()]
@@ -3666,7 +3670,6 @@ class AnimateClutter(Spell): ##TODO this will need to update for evermelting ice
 		self.tagdict[Tags.Metallic] = MetalShard,LivingMetalScroll()
 		self.tagdict[Tags.Chaos] = Improvise,LivingChaosScroll()
 
-	##TODO make generic nick-nack show up on the spell
 
 	def get_description(self):
 		return ("Animate your trinkets into allies. Each trinket is a flying, teleporting, melee attacker which "
@@ -4201,14 +4204,524 @@ class TheSecondSeal(Spell):
 		apply_minion_bonuses(self, dog)
 		return dog
 
+class MoguiSplitting(Buff):
+	def __init__(self, spell):
+		self.spell = spell
+		Buff.__init__(self)
+
+	def on_init(self):
+		self.name = "Rain Demon"
+		self.description = "Each turn create another mogui if soaked or in a Rain Cloud. Destroys the cloud and loses soaked each turn."
+		self.owner_triggers[EventOnDeath] = self.on_death
+
+	def on_advance(self):
+		turns_remaining = self.owner.turns_to_death - 1
+		if turns_remaining <= 1:
+			return
+		unit = None
+		cloud = self.owner.level.tiles[self.owner.x][self.owner.y].cloud
+		if self.spell.get_stat('cold'):
+			valid_clouds = (BlizzardCloud, RainCloud)
+		elif self.get_stat('claws'):
+			valid_clouds = (StormCloud, RainCloud)
+		else:
+			valid_clouds = (RainCloud)
+		if cloud and isinstance(cloud, valid_clouds):
+			unit = self.spell.make_mogui(turns_remaining)
+			cloud.kill()
+		if self.owner.has_buff(SoakedBuff):
+			unit = self.spell.make_mogui(turns_remaining)
+			self.owner.remove_buffs(SoakedBuff)
+		if unit == None:
+			return
+		self.owner.level.summon(self.spell.owner, unit, target=Point(self.owner.x, self.owner.y), team=self.owner.team)
+
+	def on_death(self, evt):
+		if not self.spell.get_stat('possess'):
+			return
+		dominate = self.spell.owner.get_or_make_spell(Dominate)
+		dominate.caster = self.owner
+		dominate.owner = self.owner
+		dominate.statholder = self.spell.owner
+
+		targets = [u for u in self.owner.level.get_units_in_ball(self.owner, radius=dominate.range) if are_hostile(u, self.owner)]
+		targets_hp = []
+		if dominate.get_stat('check_cur_hp'):
+			targets_hp = [u for u in  targets if u.cur_hp <= dominate.get_stat('hp_threshold')]
+		else:
+			targets_hp = [u for u in  targets if u.max_hp <= dominate.get_stat('hp_threshold')]
+		if targets_hp == []:
+			return
+		
+		target = random.choice(targets_hp)
+		self.owner.level.act_cast(self.owner, dominate, target.x, target.y, pay_costs=False) ##TODO this has crashed before. This still crashes sometimes, idk what's wrong now.
+
+def Mogui():
+	unit = Unit()
+	unit.name = "Mogui"
+	unit.tags = [Tags.Nature, Tags.Demon]
+	if water_tag in Tags:
+		unit.tags.append(Tags.Water)
+	unit.asset = ["TcrsCustomModpack", "Units", "mogui"]
+	unit.max_hp = 24
+	unit.resists[Tags.Holy] = -100
+	unit.resists[Tags.Dark] = 50
+
+	unit.spells.append(SimpleMeleeAttack(damage=5,damage_type=Tags.Physical))
+	return unit
+
+
+class RainDemonMogui(Spell):
+	def on_init(self):
+		self.name = "Rain Demon Mogui"
+		self.tags = [Tags.Nature, Tags.Chaos, Tags.Conjuration]
+		if water_tag in Tags:
+			self.tags.append(Tags.Water)
+		self.level = 6
+		self.max_charges = 2
+		self.asset =  ["TcrsCustomModpack", "Icons", "mogui_icon"]
+		
+		self.minion_health = 40
+		self.minion_damage = 5
+		self.minion_duration = 25
+
+		self.upgrades['cold'] = (1, 4, "Cold Shower", "Mogui gain your icicle spell on an 8 turn cooldown. They also multiply on blizzard clouds.")
+		self.upgrades['claws'] = (1, 2, "Lightning Claws", "Mogui gain a leaping [Lightning] melee attack with 4 tiles of range. They also multiply on storm clouds.")
+		self.upgrades['possess'] = (1, 2, 'Possession', 'When Mogui die or time out, they cast your dominate spell on a nearby target.')
+
+	def get_extra_examine_tooltips(self):
+		return [Mogui(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2]]
+
+	def get_description(self):
+		return ("Summon a mogui, a rain demon which creates another mogui if it's soaked or in a Rain Cloud. This effect destroys these clouds.\n"
+				"Mogui have [{minion_health}_HP:minion_health], and a melee attack which deals [{minion_damage}_physical:physical] damage. "
+				"Mogui, and their copies, vanish after [{minion_duration}_turns:minion_duration].").format(**self.fmt_dict())
+
+	def make_mogui(self, turns):
+		unit = Mogui()
+		unit.max_hp = self.get_stat('minion_health')
+		unit.turns_to_death = turns
+		unit.source = self
+		unit.apply_buff(MoguiSplitting(self))
+		if self.get_stat('cold'):
+			grant_minion_spell(Icicle, unit, self.caster, cool_down=8)
+		if self.get_stat('leap'):
+			leap = LeapAttack(damage=self.get_stat('minion_damage'),range=self.get_stat('minion_range',base=4),damage_type=Tags.Physical,is_leap=True)
+			leap.name = "Leaping Claws"
+			unit.spells.append(leap)
+		return unit
+
+	def cast_instant(self, x, y):
+		unit = self.make_mogui(self.get_stat('minion_duration'))
+		apply_minion_bonuses(self, unit)
+		self.owner.level.summon(self.owner, unit, target=Point(x, y), team=self.owner.team)
+
+
+
+class MitreMovement(Spell):
+	def on_init(self):
+		self.name = "Mitre Movement" ##This spell's goal will be pretty obvious: move like a bishop.
+		self.level = 3
+		self.tags = [Tags.Holy, Tags.Sorcery, Tags.Translocation]
+		self.asset =  ["TcrsCustomModpack", "Icons", "bishop_movement"]
+		self.description = "Teleport to target tile in a diagonal line."
+
+		self.range = 99
+		self.max_charges = 12
+	
+		self.upgrades['scourge'] = (1, 4, "Scourging Escape", "Cast your scourge spell on [2:num_targets] random unit in line of sight from the starting point.")
+		self.upgrades['requires_los'] = (-1, 2, "Blindcasting", "This spell can be cast without line of sight")
+		self.upgrades['blast'] = (1, 4, "Dramatic Entrance", "Deal 5 holy damage to all targets in line of sight. This damage is fixed.")
+		
+
+	def can_cast(self, x, y):
+		return Spell.can_cast(self, x, y) and self.caster.level.can_move(self.caster, x, y, teleport=True) and Point(x,y) in self.get_targetable_tiles()
+
+	def get_targetable_tiles(self):
+		tiles = []
+		size = self.get_stat('range')
+		x = self.caster.x
+		y = self.caster.y
+		def get_diagonal_line(size, x_mult, y_mult):
+			for i in range(size):
+				p = Point(x+i*x_mult, y+i*y_mult)
+				if not self.caster.level.is_point_in_bounds(p):
+					break
+				if self.caster.level.tiles[p.x][p.y].is_wall():
+					if self.caster.level.can_walk(p.x, p.y):
+						tiles.append(p)
+					elif self.get_stat('requires_los'):
+						break
+					else:
+						continue
+				if self.caster.level.tiles[p.x][p.y].is_chasm:
+					if self.caster.level.can_walk(p.x, p.y):
+						tiles.append(p)
+				else:
+					tiles.append(p)
+		get_diagonal_line(size, 1, 1)
+		get_diagonal_line(size, -1 , 1)
+		get_diagonal_line(size, 1 , -1)
+		get_diagonal_line(size, -1 , -1)
+		return tiles
+
+	def cast(self, x, y):
+		start = Point(self.caster.x, self.caster.y)
+		self.caster.level.show_effect(self.caster.x, self.caster.y, Tags.Translocation)
+		yield self.caster.level.act_move(self.caster, x, y, teleport=True)
+		if self.get_stat('blast'):
+			units = [u for u in self.caster.level.units if are_hostile(u, self.caster) and self.owner.level.can_see(self.caster.x, self.caster.y, u.x, u.y)]
+			for u in units:
+				u.deal_damage(5, Tags.Holy, self)
+		if self.get_stat('scourge'):
+			units = [u for u in self.caster.level.units if are_hostile(u, self.caster) and self.owner.level.can_see(start.x, start.y, u.x, u.y)]
+			for i in range(self.get_stat('num_targets',base=1)):
+				if units != []:
+					unit = random.choice(units)
+					units.remove(unit)
+					spell = self.caster.get_or_make_spell(ScourgeSpell)
+					self.caster.level.act_cast(self.caster, spell, unit.x, unit.y, pay_costs=False)
+				
+
+def Hydra():
+	unit = Snake()
+	unit.name = "Hydra"
+	unit.asset = ["TcrsCustomModpack", "Units", "hydra"]
+	unit.max_hp = 54
+	unit.spells[0].damage = 18
+	unit.buffs.append(SpawnOnDeath(TwoHeadedSnake, 3))
+	return unit
+
+class LoadedDice(Buff):
+	def __init__(self, roll):
+		self.roll = roll
+		Buff.__init__(self)
+		self.description = "Always roll at least a " + str(roll) + " or higher."
+
+	def on_init(self):
+		self.name = "Loaded Dice"
+		self.color = Tags.Chaos.color
+
+class ChaosDice(Spell):
+	def on_init(self):
+		self.name = "Chaotic Ice Dice"
+		self.tags = [Tags.Ice, Tags.Chaos, Tags.Sorcery]
+		self.asset =  ["TcrsCustomModpack", "Icons", "ice_dice"]
+		self.level = 4
+		self.max_charges = 6
+		self.damage = 10
+		self.range = 0
+		self.self_target = True
+		
+		self.upgrades['ice'] = (1, 2, "Pure Ice Dice", "Instead of dealing damage, cast your Iceball or Deathchill spells randomly on the targets.")
+		self.upgrades['loaded'] = (1, 2, "Loaded Dice", "Gain a buff that always ensures your next roll is at least 1 value higher than the previous roll. Resets when you roll a '6'.")
+		self.upgrades['snake'] = (1, 4, "Snake Eyes", "Roll two times, adding up the total. Each '1' rolled summons a hydra.")
+		##Possible upgrade idea - Uses num_targets attribute to increase maximum roll your dice can reach.
+
+	def get_description(self):
+		return ("Roll a number between 1 to 6. Deal [{damage}_damage:damage] multiplied by X, to X random enemies where X is the number rolled. \n"
+				" The damage is chosen from one of: [Fire], [Lightning], [Ice], and [Physical]. The same enemy is never targeted twice.").format(**self.fmt_dict())
+
+	def get_extra_examine_tooltips(self):
+		return [self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2], Hydra()]
+
+	def cast(self, x, y):
+		roll = random.randint(1,6)
+		if self.get_stat('loaded'):
+			buff = self.caster.get_buff(LoadedDice)
+			if not buff and roll < 6:
+				self.caster.apply_buff(LoadedDice(roll))
+			elif roll == 6:
+				pass  
+			else:
+				roll = random.randint(buff.roll + 1, 6)
+				if roll == 6:
+					self.caster.remove_buff(buff)
+				else:
+					buff.roll = roll
+					buff.description = "Always roll at least a " + str(roll) + " or higher."
+
+		if self.get_stat('snake'):
+			roll_snake = random.randint(1,6)
+			count = 0
+			if roll == 6:
+				count += 1
+			if roll_snake == 1:
+				count += 1
+			for i in range(count):
+				unit = Hydra()
+				apply_minion_bonuses(self, unit)
+				self.summon(unit, Point(self.caster.x, self.caster.y))
+			roll += roll_snake
+
+		cur_targets = []
+		for i in range(roll):
+			all_targets = [u for u in self.caster.level.units if self.caster.level.are_hostile(self.caster, u) and u not in cur_targets]
+			if not all_targets:
+				return
+			target = random.choice(all_targets)
+			all_targets.remove(target)
+			cur_targets.append(target)
+			
+			if self.get_stat('ice'):
+				rand_spell = random.choice([Iceball, DeathChill])
+				spell = self.caster.get_or_make_spell(rand_spell)
+				self.caster.level.act_cast(self.caster, spell, target.x, target.y, pay_costs=False)
+				self.caster.level.show_path_effect(self.owner, target, Tags.Ice, minor=True)
+			else:
+				dtype = random.choice([Tags.Fire, Tags.Lightning, Tags.Physical, Tags.Ice])
+				target.deal_damage(self.get_stat('damage') * roll, dtype, self)
+				self.owner.level.show_path_effect(self.owner, target, Tags.Chaos, minor=True)
+		yield
+
+
+class SanguineThirst(Buff):
+	def __init__(self, spell):
+		Buff.__init__(self)
+		self.spell = spell
+		self.name = "Wraith Hunger"
+		self.buff_type = BUFF_TYPE_BLESS
+		self.stack_type = STACK_INTENSITY
+		self.asset = ["status", "blood_tap"] ##TODO make an asset
+		self.tag_bonuses_pct[Tags.Blood]['hp_cost'] = 50
+		if self.spell.get_stat('wrath'):
+			self.tag_bonuses_pct[Tags.Blood]['damage'] = 100
+
+class WraithHunger(Spell):
+	def on_init(self):
+		self.name = "Wraith's Hunger"
+		self.asset = ["TcrsCustomModpack", "Icons", "wraith_hunger"]
+		self.tags = [Tags.Arcane, Tags.Sorcery, Tags.Blood]
+		self.level = 2
+		
+		self.hp_cost = 3
+		self.damage = 30
+		self.range = 5
+
+		self.upgrades['rift'] = (1, 3, "Rift Wraith", "If there is no unit to target, summon a void rift.")
+		self.upgrades['drake'] = (1, 6, "Drake Portal", "If you kill the target, cast your Void Drake on its tile.")
+		self.upgrades['wrath'] = (1, 2, "Wraith's Wrath", "The debuff also grants blood spells 100% bonus damage.") ##TODO how is this worded in upgrades?
+		
+	def get_description(self):
+		return "Deal [{damage}_Arcane:Arcane] damage. If no target was killed, increase the health cost of your blood spells by 50% for 8 turns. This debuff can stack.".format(**self.fmt_dict())
+
+	def get_extra_examine_tooltips(self):
+		return [self.spell_upgrades[0], VoidSpawner(), self.spell_upgrades[1], VoidDrake(), self.spell_upgrades[2]]
+
+	def cast_instant(self, x, y):
+		unit = self.caster.level.get_unit_at(x, y)
+		if unit:
+			unit.deal_damage(self.get_stat('damage'), Tags.Arcane, self)
+			if unit.is_alive():
+				self.caster.apply_buff(SanguineThirst(self), 7)
+			elif self.get_stat('drake'):
+				spell = self.caster.get_or_make_spell(SummonVoidDrakeSpell)
+				self.caster.level.act_cast(self.caster, spell, x, y, pay_costs=False)
+		if not unit and self.get_stat('rift'):
+			u = VoidSpawner()
+			apply_minion_bonuses(self, u)
+			self.summon(unit=u, target=Point(x,y))
+			self.caster.apply_buff(SanguineThirst(self), 7)
+
+class Landmine_Prop(Prop):
+	def __init__(self, owner):
+		self.name = "Mine"
+		self.asset = ["TcrsCustomModpack", "Tiles", "landmine"]
+		self.damage = 15
+		self.damage_type = Tags.Physical
+		self.owner = owner
+		self.source = None
+		self.radius = 1
+		self.spell = None
+
+	def get_impacted_tiles(self, x, y):
+		return [p for stage in Burst(self.owner.level, Point(x, y), self.radius) for p in stage]
+
+	def on_unit_enter(self, unit):
+		if self.spell:
+			self.owner.level.act_cast(self.owner, self.spell, unit.x, unit.y, pay_costs=False)
+		else:
+			for t in self.owner.level.get_points_in_rect(unit.x-1, unit.y-1, unit.x+1, unit.y+1):
+				self.owner.level.deal_damage(t.x, t.y, self.damage, self.damage_type, self)
+		self.level.remove_obj(self)
+
+class Landmines_Minefield(Upgrade):
+	def on_init(self):
+		self.name = "Recycled Minefield"
+		self.level = 2
+		self.description = "When a [metallic], [construct], or [glass] unit dies place a landmine on its tile."
+
+		self.global_triggers[EventOnDeath] = self.on_death
+	
+	def on_death(self, evt):
+		if Tags.Construct not in evt.unit.tags and Tags.Glass not in evt.unit.tags and Tags.Metallic not in evt.unit.tags:
+			return
+		tile = self.owner.level.tiles[evt.unit.x][evt.unit.y]
+		if tile.is_chasm or tile.prop:
+			return
+		point = Point(evt.unit.x, evt.unit.y)
+		spell = self.owner.get_or_make_spell(Landmines)
+		prop = spell.make_mine(self.owner)
+		self.owner.level.add_obj(prop, point.x, point.y)
+		
+
+class Landmines(Spell):
+	def on_init(self):
+		self.name = "Proximity Mine"
+		self.level = 2
+		self.asset = ["TcrsCustomModpack", "Icons", "landmine_icon"]
+		self.tags = [Tags.Sorcery, Tags.Enchantment, Tags.Metallic]
+
+		self.damage = 20
+		self.max_charges = 30
+		self.range = 99
+		self.quick_cast = True
+		self.must_target_walkable = True
+
+		self.add_upgrade(Landmines_Minefield())
+		self.upgrades['requires_los'] = (-1, 2, "Blindcasting", "Proximity Mine can be cast without line of sight")
+		self.upgrades['shrapnel'] = (1, 2, "Shrapnel Mines", "Triggered mines instead use your shrapnel blast spell.")
+
+	def get_description(self):
+		return ("Place a mine on target tile. It detonates when a unit moves onto it, dealing [{damage}_physical:physical] in a 3x3 square."
+				"\nThis spell can be cast once without ending your turn.").format(**self.fmt_dict())
+
+	def can_cast(self, x, y):
+		tile = self.caster.level.tiles[x][y]
+		return not tile.prop and Spell.can_cast(self, x, y)
+
+	def make_mine(self, caster):
+		prop = Landmine_Prop(caster)
+		prop.source = self
+		prop.damage = self.get_stat('damage')
+		if self.get_stat('shrapnel'):
+			prop.spell = caster.get_or_make_spell(ShrapnelBlast)
+		return prop
+
+	def cast_instant(self, x, y):
+		prop = self.make_mine(self.caster)
+		self.caster.level.add_obj(prop, x, y)
+
+
+class SeaWyrmBreath(BreathWeapon):
+	def __init__(self, spell=None):
+		BreathWeapon.__init__(self)
+		if spell != None:
+			self.spell = spell
+		else:
+			self.spell = None
+		self.name = "Poisonous Breath"
+		self.damage = 10
+		self.duration = 5
+		self.damage_type = Tags.Poison
+		self.cool_down = 3
+		self.range = 5
+		self.angle = math.pi / 6.0
+
+	def get_description(self):
+		return "Applies 5 turns of poison"
+
+	def per_square_effect(self, x, y):
+		if self.spell != None:
+			if self.spell.get_stat('gaseous'):
+				cloud = self.spell.owner.get_or_make_spell(PoisonousGas).make_cloud(self.caster)
+				self.caster.level.add_obj(cloud, x, y)
+			if self.spell.get_stat('rainy'):
+				rain_storm = self.spell.owner.get_or_make_spell(RainStormSpell)
+				cloud = RainCloud(self.spell.owner, spell=rain_storm)
+				cloud.duration = rain_storm.get_stat('duration')
+				self.caster.level.add_obj(cloud, x, y)
+			
+		unit = self.caster.level.get_unit_at(x, y)
+		if unit:
+			self.caster.level.deal_damage(x, y, self.get_stat('damage'), self.damage_type, self)
+			unit.apply_buff(Poison(), self.get_stat('duration'))
+		else:
+			self.caster.level.deal_damage(x, y, 0, self.damage_type, self)
+
+
+def SeaSerpent_Unit(s=None):
+	unit = Unit()
+	unit.name = "Sea Serpent"
+	unit.asset = ["TcrsCustomModpack", "Units", "sea_serpent_unit"]
+	unit.max_hp = 75
+
+	if s != None:
+		unit.spells.append(SeaWyrmBreath(s))
+	else:
+		unit.spells.append(SeaWyrmBreath())
+	unit.spells.append(SimpleMeleeAttack(14, trample=True))
+
+	unit.tags = [Tags.Nature, Tags.Dragon, Tags.Living]
+	if water_tag in Knowledges:
+		unit.tags.append(Tags.Water)
+
+	unit.resists[Tags.Poison] = 100
+	unit.resists[Tags.Lightning] = -100
+	unit.resists[Tags.Ice] = -100
+	return unit
+
+class SeaSerpent(Spell):
+	def on_init(self):
+		self.name = "Sea Serpent"
+		self.tags = [Tags.Nature, Tags.Conjuration, Tags.Dragon]
+		if water_tag in Knowledges:
+			self.tags.append(Tags.Water)
+		self.level = 5
+		self.asset = ["TcrsCustomModpack", "Icons", "sea_serpent_icon"]
+		self.max_charges = 2
+
+		self.must_target_empty = True
+		self.must_target_walkable = True
+
+		self.minion_health = 75
+		self.minion_damage = 14
+		self.breath_damage = 10
+		self.minion_range = 7
+
+		self.upgrades['rainy'] = (1, 2, "Rain Clouds", "The breath weapon also creates your rain storm clouds on each tile.")
+		self.upgrades['gaseous'] = (1, 4, "Poison Clouds", "The breath weapon also creates your poisonous gas clouds on each tile.")
+		self.upgrades['abc'] = (1, 4, "ABC Serpent", "The serpent gains 5 max hp, 1 breath damage, and 2 melee damage for each unique letter in the names of spells the caster knows.")
+
+	def get_description(self):
+		return ("Summon a Sea Serpent at target square.\n Sea Serpents have [{minion_health}_HP:minion_health], 100 [poison] resistance, and -100 [Ice] and [Lightning] resistances.\n"
+				"They have a breath weapon which deals [{breath_damage}_poison:poison] damage and poisons for 5 turns, "
+				"and a trampling melee attack which deals [{minion_damage}_physical:physical] damage.").format(**self.fmt_dict())
+	
+	def get_extra_examine_tooltips(self):
+		return [self.wyrm(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2]]
+
+	def wyrm(self):
+		wyrm = SeaSerpent_Unit(self)
+		wyrm.max_hp = self.get_stat('minion_health')
+		wyrm.spells[0].damage = self.get_stat('breath_damage')
+		wyrm.spells[0].range = self.get_stat('minion_range')
+		wyrm.spells[1].damage = self.get_stat('minion_damage')
+		if self.get_stat('abc'):
+			alphabet = {}
+			for s in self.caster.spells:
+				for letter in s.name:
+					if letter.lower() not in [' ', '\'', '%', ':']:
+						alphabet[letter] = True
+			#print(alphabet.items())
+			num_letters = len(alphabet)
+			wyrm.max_hp += num_letters * 5
+			wyrm.spells[0].damage += num_letters
+			wyrm.spells[1].damage += num_letters * 2
+		return wyrm
+
+	def cast_instant(self, x ,y):
+		unit = self.wyrm()
+		self.summon(unit, Point(x, y))
 
 def construct_spells():
 	spellcon = [MetalShard, CorpseExplosion, FlyWheel, Rockfall, Improvise, Absorb, Haste, BloodOrbSpell, EnchantingCross, Icepath,
 				SummonBookwyrm, Exsanguinate, Grotesquify, WordoftheSun, WordofFilth, HolyBeam, Amalgamate, SummonCauldron, OccultBlast,
 				RingofFishmen, CallBerserker, ChaosBolt, Machination, Skulldiggery, SummonEyedra, ShieldOrb, PoisonousGas, Hemortar, SummonIcyBeast,
 				RainbowSeal, SteelFangs, Leapfrog, KnightlyLeap, SummonChaosBeast, BeckonCowardlyLion, PowerShift, Icebeam, TreeFormSpell,
-				AnimateClutter, HP_X_Damage, Overload, UtterDestruction, DominoeAttack, UnstableSpellStorm, Cloudwalk, TheSecondSeal
-				 ## , MirrorShield, PortableHole, Landmines, , TidesofWoe,
+				AnimateClutter, HP_X_Damage, Overload, UtterDestruction, DominoeAttack, UnstableSpellStorm, Cloudwalk, TheSecondSeal,
+				RainDemonMogui, MitreMovement, ChaosDice, WraithHunger, Landmines, SeaSerpent
 				]
+	print("Added " + str(len(spellcon)) + " spells")
 	for s in spellcon:
 		Spells.all_player_spell_constructors.append(s)

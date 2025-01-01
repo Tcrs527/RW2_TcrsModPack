@@ -700,9 +700,6 @@ class NightsightBuff(Buff):
 		self.knight = EyeKnight()
 		apply_minion_bonuses(self.skill, self.knight)
 		self.summon(self.knight)
-		for spell in self.owner.spells: ##TODO teach it one random elemental eye no matter what you have?
-			if Tags.Eye in spell.tags and spell.level == 2:
-				grant_minion_spell(type(spell), self.knight, self.owner, cool_down=15)
 
 	def on_applied(self, owner):
 		if self.knight == None:
@@ -716,28 +713,28 @@ class NightsightBuff(Buff):
 		if self.knight == None or self.knight.is_alive() == False:
 			self.make_knight()
 		else:
-			self.knight.max_hp += 5
-			self.knight.cur_hp += 5
+			self.knight.max_hp += 8
+			self.knight.cur_hp += 8
 			melee = [s for s in self.knight.spells if s.name == "Melee Attack"][0]
 			melee.damage += 2
 
 class NightsightLantern(Upgrade):
 	def on_init(self):
-		self.name = "Nightsight Lantern" #Darksight? 
+		self.name = "Nightsight Lantern"
 		self.tags = [Tags.Dark, Tags.Eye, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "nightsight_lantern"]
 		self.level = 5
 
-		self.minion_health = 25
-		self.minion_damage = 11
+		self.minion_health = 30
+		self.minion_damage = 10
 
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.global_triggers[EventOnDeath] = self.on_death
 
 	def get_description(self):
 		return ("Whenever you cast a [dark] or [eye] spell, gain Nightsight with duration equal to the spell's level. Eye spells give 4 times their level. \n"
-				"While you have the buff summon an Eye Knight until you no longer have the buff. The Eye Knight knows your level 2 eye spells.\n"
-			    "Each turn the Eye Knight gains 5 bonus HP, and 2 melee damage.\n").format(**self.fmt_dict())
+				"While you have the buff summon an Eye Knight until you no longer have the buff. When you cast an Eye enchantment, the Eye Knight also casts it.\n"
+			    "Each turn the Eye Knight gains 8 bonus HP, and 2 melee damage.\n").format(**self.fmt_dict())
 	
 	def get_extra_examine_tooltips(self):
 		return [EyeKnight()]
@@ -748,10 +745,17 @@ class NightsightLantern(Upgrade):
 			if evt.unit == buff.knight:
 				buff.make_knight
 
-	def on_spell_cast(self, evt): ##Wonky interaction with spell queues from bloody orb death shock, probably has to do with act_cast queueing
+	def on_spell_cast(self, evt):
 		if Tags.Dark in evt.spell.tags or Tags.Eye in evt.spell.tags:
 			if Tags.Eye in evt.spell.tags:
 				self.owner.apply_buff(NightsightBuff(self), evt.spell.level * 4)
+				buff = self.owner.get_buff(NightsightBuff)
+				if buff.knight != None and Tags.Enchantment in evt.spell.tags:
+					s = self.owner.get_or_make_spell(type(evt.spell))
+					spell = copy.deepcopy(s)
+					spell.owner = buff.knight
+					spell.caster = buff.knight
+					self.owner.level.act_cast(buff.knight, spell, buff.knight.x, buff.knight.y, pay_costs=False, queue=True)
 			else:
 				self.owner.apply_buff(NightsightBuff(self), evt.spell.level)
 
@@ -769,15 +773,14 @@ class ContractFromBuff(Buff):
 		self.tag_bonuses[Tags.Dark]['quick_cast'] = 1
 		self.tag_bonuses[Tags.Chaos]['quick_cast'] = 1
 		self.resists[Tags.Holy] = -100
+		self.resists[Tags.Dark] = 100
 
 		self.dtypes = [Tags.Dark, Tags.Chaos]
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 
 	def on_cast(self,evt):
 		if Tags.Dark in evt.spell.tags or Tags.Chaos in evt.spell.tags:
-			self.owner.deal_damage(self.dmg, Tags.Holy, self)
-		else:
-			self.owner.deal_damage(1, Tags.Holy, self)
+			self.owner.deal_damage(5, Tags.Holy, self)
 
 class ContractFromBelow(Upgrade):
 	def on_init(self):
@@ -785,10 +788,9 @@ class ContractFromBelow(Upgrade):
 		self.tags = [Tags.Dark, Tags.Chaos]
 		self.asset = ["TcrsCustomModpack", "Icons", "contract_from_below"]
 		self.description =	("In each realm, after you summon 5 uniquely named demons, gain Demonic Contract.\n" + 
-							"Demonic contract give: your [dark] and [chaos] spells quickcast, you -100 [holy] resist," +
-							"and deals 5 [holy] damage to you per [dark] or [chaos] spell cast. All other spells deal 1 holy damage to you.")
-		self.level = 7 ##This is far weaker now that quickcast has been toned down. I can probably nerf the self damage.
-		self.dmg = 10
+							"Demonic contract give: your [dark] and [chaos] spells quickcast, you -100 [holy] resist and 100% [dark] resist," +
+							"and deals 5 [holy] damage to you per [dark] or [chaos] spell cast.")
+		self.level = 6
 		self.demons = {}
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_added
 	
@@ -823,20 +825,21 @@ class MageArmor(Upgrade):
 		self.level = 5
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_added
 		self.duration = 10
-		self.description = ("Upon entering a realm, gain 25% resistance to each damage type for each spell tags in each spell you know. Lasts [{duration}_turns:duration].\n" +
-							"[Fire] spells grant [Fire] resistance, then repeat for all tags with corresponding damage types. " +
-							"[Nature] tags grant [Poison] resistance and [Metallic] tags [Physical] resistance.").format(**self.fmt_dict())
+		self.description = ("Upon entering a realm, gain 25% resistance to damage types corresponding to each tag in each of your spells. Lasts [{duration}_turns:duration].\n" +
+							"[Fire] spells grant [Fire] resistance, then repeat for all tags with damage types.\n" +
+							"[Nature] tags grant [Poison] resistance, [Metallic] tags [Physical], [Blood] tags [Dark], and [Eye] tags [Arcane].").format(**self.fmt_dict())
 
 	def on_unit_added(self, evt):
 		if evt.unit == self.owner:
 			restags = {Tags.Fire:0,Tags.Ice:0,Tags.Lightning:0,Tags.Arcane:0,Tags.Dark:0,Tags.Holy:0,Tags.Poison:0,Tags.Physical:0}
 			spells = self.owner.spells
 			for spell in spells:
-				#if Tags.Enchantment not in spell.tags: ##Used to be limited to enchanting spells, does this matter?
-				#	continue
 				for t in spell.tags:
 					if t == Tags.Nature:t = Tags.Poison
-					if t == Tags.Metallic:t = Tags.Physical
+					elif t == Tags.Metallic:t = Tags.Physical
+					elif t == Tags.Blood:t = Tags.Dark
+					elif t == Tags.Eye:t = Tags.Arcane
+					
 					if t in restags:
 						restags[t] += 25
 						
@@ -870,7 +873,7 @@ class Accelerator(Upgrade):
 
 		self.threshold = 100
 		self.charges = 0
-		self.duration = 5 ##Todo tooltip turns 
+		self.duration = 5
 
 	def on_damage(self, evt):
 		if not isinstance(evt.source, Spell):
@@ -891,10 +894,10 @@ class WeaverOfElements(Upgrade):
 		self.name = "Weave the Elements"
 		self.tags = [Tags.Fire, Tags.Ice, Tags.Lightning]
 		self.asset = ["TcrsCustomModpack", "Icons", "weaver_of_elements"]
-		self.description = ("For every 3 [Fire], [Ice], or [Lightning] spells you cast, deal damage in a line between each point and the other two points.\n" +
+		self.description = ("For every 3 [Fire], [Ice], or [Lightning] spells you cast, deal damage in a line between the target tile and the other spell's target tiles.\n" +
 							"Deal [fire] damage if any of the spells had the [fire] tag, then repeat for [Ice] and [Lightning].\n"
 							"Does not hurt you. Does work with free spells.")
-		self.level = 5 ##Change this to every 3 spells cast, and make a triangle between the 3 points
+		self.level = 5
 		
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.damage = 5
@@ -908,9 +911,6 @@ class WeaverOfElements(Upgrade):
 			for tag in evt.spell.tags:
 				if tag not in self.spell_tags and tag in self.tags:
 					self.spell_tags.append(tag)
-			#print(self.points)
-			#print(self.spell_tags)
-			#print(len(self.points))
 			wizard_p = Point(self.owner.x, self.owner.y)
 			if len(self.points) >= 3:
 				if self.spell_tags == []:
@@ -990,10 +990,10 @@ class WeaverOfMaterialism(Upgrade):
 		self.name = "Weave the Material"
 		self.tags = [Tags.Nature, Tags.Dragon, Tags.Metallic]
 		self.asset = ["TcrsCustomModpack", "Icons", "weaver_of_material"]
-		self.description = ("For every 3 [nature], [dragon], and [metallic] spells you cast, summon a slime at the third spell's target.\n" +
+		self.description = ("For every 3 [nature], [dragon], and [metallic] spells you cast, summon a slime at the third spell's target tile.\n" +
 							"If the [nature] tag was in any spell, the slime gains max hp and spawns additional green slimes.\n"
-							"If the [dragon] tag was in any spell, gain a breath attack.\n"
-							"If the [metallic] tag was in any spell, gain metallic resistances and melee retaliation damage.\n"
+							"If the [dragon] tag was in any spell, it gains a breath attack.\n"
+							"If the [metallic] tag was in any spell, it gains metallic resistances and melee retaliation damage.\n"
 							"Does not work with free spells.").format(**self.fmt_dict())
 		self.level = 7 ##Change this to every 3 spells cast
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
@@ -1118,12 +1118,12 @@ class Scrapheap(Upgrade):
 	def get_extra_examine_tooltips(self):
 		return [Golem()]
 
-class ArclightEagle(Upgrade): ##Quickcast nerfed, does this get changed to 2 spells?
+class ArclightEagle(Upgrade):
 	def on_init(self):
 		self.name = "Arclight Eagle" ##Obviously inspired by Arclight Phoenix
 		self.tags = [Tags.Lightning, Tags.Conjuration]
 		self.asset = ["TcrsCustomModpack", "Icons", "arclight_eagle"]
-		self.description = "On any turn you cast at least 3 spells, one of which is [lightning], summon an eagle. The eagle inherits upgrades from your Flock of Eagles spell."
+		self.description = "On any turn you cast at least 2 spells, one of which is [lightning], summon an eagle. The eagle inherits upgrades from your Flock of Eagles spell."
 		self.level = 5
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.spells_cast = 0
@@ -1136,7 +1136,7 @@ class ArclightEagle(Upgrade): ##Quickcast nerfed, does this get changed to 2 spe
 		self.spells_cast += 1
 
 	def on_advance(self):
-		if self.spells_cast >= 3 and self.lightning == True:
+		if self.spells_cast >= 2 and self.lightning == True:
 			s = self.owner.get_or_make_spell(FlockOfEaglesSpell)
 			eagle = s.make_eagle()
 			self.summon(eagle)
@@ -1153,7 +1153,7 @@ class Arithmetic(Buff):
 		self.stack_type	= STACK_NONE
 		self.name = "Arithmagics"
 		self.color = Tags.Sorcery.color
-		#self.asset = ['status', 'stun']
+		#self.asset = ['status', 'stun'] ##TODO make this?
 		self.description = "Solve for 0. Math is fun."
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.result = 0
@@ -1214,7 +1214,7 @@ class QueenOfTorment(Upgrade):
 		
 	def get_description(self):
 		return ("When an enemy dies to [Ice] damage apply Fear to an enemy within 5 tiles."
-				" Repeat for [Poison] damage with the Frozen debuff, and [Arcane] damage with Poisoned plus Acidified debuffs.\n"
+				" Repeat for [Poison] damage with the Frozen debuff, and [Arcane] damage with Poisoned and Acidified debuffs.\n"
 				"Fear lasts [{duration}_turns:duration]. Freeze lasts 2 extra turn, Poisoned lasts 4 extra turns, Acidify lasts forever.").format(**self.fmt_dict())
 
 	def on_death(self, evt):
@@ -1245,14 +1245,13 @@ class QueenOfTorment(Upgrade):
 class CloudcoverBuff(Buff):
 	def __init__(self, tag):
 		self.tag = tag
-
 		Buff.__init__(self)
 		self.resists[tag] = 75
 
 	def on_init(self):
 		self.name = "Cloudy Covering"
 		self.buff_type = BUFF_TYPE_BLESS
-		self.stack_type	= STACK_NONE
+		self.stack_type	= STACK_REPLACE
 		self.color = Tags.Enchantment.color
 		self.description = "Resistant to the cloud damage type."
 		self.resists = {}
@@ -1263,7 +1262,7 @@ class Cloudcover(Upgrade):
 		self.tags = [Tags.Enchantment]
 		self.asset = ["TcrsCustomModpack", "Icons", "cloudcover"]
 		self.level = 5 ##Tentative level 5-6 this is incredibly good with stormcaller, this is very okay with everything else though.
-		self.description = ("When you end your turn in a cloud, gain 75 resistance to that cloud's damage type for 1 turn.\n" +
+		self.description = ("When you end your turn in a cloud, gain 75 resistance to that cloud's damage type for [{duration}_turns:duration] turn(s).\n" +
 							"Applies to: Blizzards, Thunderstorms, Poison Clouds.")
 		self.duration = 1
 		self.cloud_dict = {BlizzardCloud:Tags.Ice, StormCloud:Tags.Lightning, PoisonCloud:Tags.Poison, FireCloud:Tags.Fire} #Add  bloodclouds, consider rain cloud?
@@ -1272,6 +1271,8 @@ class Cloudcover(Upgrade):
 		cloud = self.owner.level.tiles[self.owner.x][self.owner.y].cloud
 		if cloud:
 			c_type = type(cloud)
+			if c_type not in self.cloud_dict.keys():
+				return
 			tag = self.cloud_dict[c_type]
 			if c_type in self.cloud_dict:
 				duration = self.get_stat('duration')
@@ -1282,7 +1283,7 @@ class EyeSpellTrigger(Upgrade):
 	def on_init(self):
 		self.name = "Eye of Providence"
 		self.level = 5
-		self.tags = [Tags.Eye]
+		self.tags = [Tags.Holy, Tags.Eye]
 		self.asset = ["TcrsCustomModpack", "Icons", "eye_of_providence"]
 		self.description = "When you cast a holy spell, advance your eye spell buff cooldowns by one turn. Activate them if they reach 0."
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
@@ -1344,8 +1345,8 @@ class Overheal(Upgrade):
 	def on_init(self):
 		self.name = "Overflowing Vitality"
 		self.level = 6
-		self.tags = [Tags.Holy, Tags.Conjuration]
-		self.asset = ["TcrsCustomModpack", "Icons", "overheal"] ##This icon is associated with satyrs, change it? TODO
+		self.tags = [Tags.Holy, Tags.Nature, Tags.Conjuration]
+		self.asset = ["TcrsCustomModpack", "Icons", "overheal"]
 		self.global_triggers[EventOnHealed] = self.on_heal
 		self.total = 0
 		self.minion_health = 28
@@ -1353,10 +1354,11 @@ class Overheal(Upgrade):
 
 	def get_description(self):
 		return ("Whenever a unit heals, gain Vitality stacks equal to the amount of missing life healed.\n"
-				"Each turn consume up to 80 vitality to summon a false prophet.").format(**self.fmt_dict())
+				"Each turn consume up to 75 vitality to summon a false prophet or an armored satyr."
+				"Current Vitality: %d\n" % self.total)
 
 	def get_extra_examine_tooltips(self):
-		return [FalseProphet()]
+		return [FalseProphet(), SatyrArmored()]
 
 	def on_heal(self, evt):
 		#for s in self.owner.spells:
@@ -1369,12 +1371,12 @@ class Overheal(Upgrade):
 		self.total -= heal
 
 	def on_advance(self):
-		if self.total < 80:
+		if self.total < 75:
 			return
-		unit = FalseProphet()
+		unit = random.choice([FalseProphet(), SatyrArmored()])
+		self.total -= 75
 		apply_minion_bonuses(self, unit)
 		self.summon(unit)
-		self.total -= 80
 
 class WalkTheOrb(Upgrade):
 	def on_init(self):
@@ -1511,7 +1513,7 @@ class ChaosScaleBuff(Buff):
 		self.color = Tags.Dragon.color
 		self.stack_type = STACK_DURATION
 		self.buff_type = BUFF_TYPE_BLESS
-		#self.asset = ["TcrsCustomModpack", "Icons", "nightsight_lantern"]
+		#self.asset = ["TcrsCustomModpack", "Icons", "nightsight_lantern"] ##TODO make this.
 
 	def on_advance(self):
 		self.cooldown -= 1
@@ -1971,15 +1973,602 @@ class TheFirstSeal(Upgrade):
 			apply_minion_bonuses(self, unit)
 			self.owner.level.summon(self.owner, unit)
 
+def make_archon():
+
+	angel = Unit()
+	angel.name = "Archon"
+	angel.tags = [Tags.Holy]
+
+	angel.max_hp = 77
+	angel.resists[Tags.Holy] = 100
+	angel.resists[Tags.Dark] = 75
+	angel.resists[Tags.Lightning] = 75
+
+	lightning = ArchonLightning()
+	lightning.damage = 14
+	lightning.range = 7
+	angel.spells.append(lightning)
+	angel.flying = True
+	return angel
+
+
+def make_angel():
+	angel = Unit()
+	angel.name = "Seraph"
+	angel.asset_name = "seraphim"
+	angel.tags = [Tags.Holy]
+
+	angel.max_hp = 33
+	angel.shields = 3
+	angel.resists[Tags.Holy] = 100
+	angel.resists[Tags.Dark] = 75
+	angel.resists[Tags.Fire] = 75
+
+	sword = SeraphimSwordSwing()
+	sword.damage = 14
+	sword.arcane = False
+	angel.spells.append(sword)
+	angel.flying = True
+	return angel
+
+class DarkBargain(Upgrade):
+	def on_init(self):
+		self.name = "Dark Bargain"
+		self.level = 7
+		self.tags = [Tags.Dark]
+		self.asset = ["TcrsCustomModpack", "Icons", "dark_bargain"]
+		self.description = "After 10 turns summon hostile angels. The amount summoned is equal to 2, plus the realm number. This can activate after the realm is cleared."
+		
+		self.global_bonuses['max_charges'] = 1
+		self.global_bonuses['num_targets'] = 1
+		self.global_bonuses['range'] = 1
+		
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
+		self.count = 0
+
+	def get_extra_examine_tooltips(self):
+		return [make_angel(), make_archon()]
+
+	def on_enter(self, evt):
+		self.count = 0
+
+	def on_advance(self):
+		self.count += 1
+		if self.count == 10:
+			difficulty = self.owner.level.gen_params.difficulty
+			for i in range(2 + difficulty):
+				unit = random.choice([make_angel(), make_archon()])
+				self.summon(unit, radius=99, sort_dist=False)
+				unit.team = 1
+
+
+class TheHitDebuff(Buff):
+	def __init__(self, skill):
+		self.skill = skill
+		Buff.__init__(self)
+		self.name = "Targeted"
+		self.stack_type = STACK_NONE
+		self.buff_type = BUFF_TYPE_CURSE
+		self.asset = ["TcrsCustomModpack", "Misc", "hitlist_buff"]
+		self.color = Tags.Sorcery.color
+		self.owner_triggers[EventOnDeath] = self.on_death
+
+	def on_death(self, evt):
+		self.skill.global_bonuses['damage'] += 1
+		self.skill.owner.global_bonuses['damage'] += 1
+
+class TheHitList(Upgrade):
+	def on_init(self):
+		self.name = "The Hit List"
+		self.tags = [Tags.Sorcery, Tags.Enchantment]
+		self.level = 4
+		self.asset = ["TcrsCustomModpack", "Icons", "hitlist_icon"]
+
+		self.owner_triggers[EventOnUnitAdded] = self.on_unit_added
+		self.global_bonuses['damage'] = 1
+		self.duration = 20
+		##Inspired by the risk of rain 1 item, this makes you play very differently. I think it's cool, but it's very limiting in which builds can wipe the whole map in 15. Encourages spells like pillar of fire
+
+	def get_description(self):
+		return ("When you enter a realm, 1 random enemy gains the 'targeted' debuff."
+				" If it dies within [{duration}_turns:duration], this skill gains 1 damage permanently.").format(**self.fmt_dict())
+
+	def on_unit_added(self, evt):
+		units = [u for u in self.owner.level.units if are_hostile(u, self.owner)]
+		target = random.choice(units)
+		target.apply_buff(TheHitDebuff(self), self.get_stat('duration'))
+
+
+class ArcticPoleBuff(Buff):
+	def __init__(self):
+		Buff.__init__(self)
+		self.name = "Polar Wizard"
+		self.stack_type = STACK_INTENSITY
+		self.buff_type = BUFF_TYPE_BLESS
+		self.show_effect = False
+		self.asset = ["TcrsCustomModpack", "Misc", "polarwizard_buff"]
+		self.color = Tags.Ice.color
+		self.tag_bonuses[Tags.Ice]['damage'] = 1
+
+class ArcticPoles(Upgrade):
+	def on_init(self):
+		self.name = "Polar Wizard"
+		self.tags = [Tags.Ice]
+		self.level = 4
+		self.asset = ["TcrsCustomModpack", "Icons", "polarwizard"]
+		
+		self.size_y = 31
+		self.duration = 10
+
+	def get_description(self):
+		return ("Gain the Polar Wizard buff each turn you are within 5 tiles of the top of bottom of the realm."
+				" Each stack grants [ice] spells and skills 1 damage. Lasts [{duration}_turns:duration].").format(**self.fmt_dict())
+
+	def on_advance(self):
+		self.size_y = self.owner.level.height
+		y = self.owner.y
+		if y < 5 or y > (self.size_y - 5):
+			self.owner.apply_buff(ArcticPoleBuff(), self.get_stat('duration'))
+
+
+class Overkill(Upgrade):
+	def on_init(self):
+		self.name = "Overkill"
+		self.level = 4
+		self.tags = [Tags.Sorcery]
+		self.asset = ["TcrsCustomModpack", "Icons", "overkill"]
+		
+		self.global_triggers[EventOnDamaged] = self.on_damage
+		self.radius = 5
+
+	def get_description(self):
+		return ("When a [sorcery] damage source deals more than 75% of a unit's maximum hp in one hit, "
+				" deal that unit's max hp, as that same damage type, to one target within [{radius}_tile:radius] tiles.").format(**self.fmt_dict())
+
+	def on_damage(self, evt):
+		if not hasattr(evt.source, 'tags'):
+			return
+		if Tags.Sorcery in evt.source.tags:
+			if not evt.damage > (evt.unit.max_hp) * 0.75:
+				return
+			targets = self.owner.level.get_units_in_ball(evt.unit, self.get_stat('radius'))
+			targets = [t for t in targets if are_hostile(t, self.owner) and t != evt.unit]
+			if len(targets) == 0:
+				return
+			random.shuffle(targets)
+			targets[0].deal_damage((evt.damage), evt.damage_type, self)
+
+
+def RecycloneUnit():
+	unit = Unit()
+	unit.name = "Recyclone"
+	unit.asset = ["TcrsCustomModpack", "Units", "recyclone2"]
+	unit.max_hp = 40
+
+	unit.spells.append(LeapAttack(damage=8, range=4))
+
+	unit.flying = True
+	unit.tags = [Tags.Construct, Tags.Nature, Tags.Metallic]
+	unit.resists[Tags.Poison] = 100
+	unit.resists[Tags.Physical] = 50
+
+	return unit
+
+class Recyclone(Upgrade):
+	def on_init(self):
+		self.name = "Recyclone"
+		self.tags = [Tags.Nature, Tags.Conjuration, Tags.Metallic]
+		self.level = 5
+		self.asset = ["TcrsCustomModpack", "Icons", "recyclone_icon"]
+
+		self.minion_health = 40
+		self.minion_damage = 8
+		self.minion_range = 4
+
+		self.owner_triggers[EventOnItemUsed] = self.on_item
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
+
+	def get_description(self):
+		return ("Whenever you enter a new level or use an item, summon a Recyclone. It has [{minion_health}_HP:minion_health], and"
+				" a [{minion_damage}_physical:physical] damage charge attack with [{minion_range}_tile:minion_range] range.\n"
+				"This skill permanently gains 10 minion life, 2 minion damage, and 1 minion range whenever you use a consumable item.").format(**self.fmt_dict())
+
+	def on_item(self, evt):
+		print("used item")
+		self.minion_health += 20
+		self.minion_damage += 3
+		self.minion_range += 1
+		self.summon_cyclone()
+		#self.description = self.get_description(self)
+
+	def summon_cyclone(self):
+		cyclone = RecycloneUnit()
+		cyclone.max_hp = self.get_stat('minion_health')
+		cyclone.spells[0].damage = self.get_stat('minion_damage')
+		cyclone.spells[0].range = self.get_stat('minion_range')
+		self.summon(cyclone, sort_dist=False)
+
+	def on_enter(self, evt):
+		self.summon_cyclone()
+		
+
+class OrdersBuff(Buff):
+	def __init__(self, skill, tag):
+		Buff.__init__(self)
+		self.name = "Orders"
+		self.stack_type = STACK_REPLACE
+		self.buff_type = BUFF_TYPE_BLESS
+		self.show_effect = False
+		self.asset = ["TcrsCustomModpack", "Misc", "orders_buff"]
+		self.tag = tag
+		self.color = tag.color
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		self.skill = skill
+
+	def on_cast(self, evt):
+		if self.tag in evt.spell.tags:
+			for i in range(self.skill.get_stat('num_summons')):
+				unit = copy.deepcopy(self.skill.tagdict[self.tag][1])
+				grant_minion_spell(copy.deepcopy(self.skill.tagdict[self.tag][0]), unit, self.owner)
+				unit.apply_buff(LivingScrollSuicide())
+				self.summon(unit, sort_dist=False)
+
+class Orders(Upgrade):
+	def on_init(self):
+		self.name = "Orders"
+		self.tags = [Tags.Sorcery]
+		self.level = 4
+		self.asset = ["TcrsCustomModpack", "Icons", "orders"]
+
+		self.minion_health = 5
+		self.num_summons = 2
+		self.duration = 1
+		
+		self.tagdict = ScrollConvertor()
+
+	def get_description(self):
+		return ("Each turn gain the Orders buff, which has a random tag. It can be: [Fire], [Lightning], [Ice], [Nature], [Arcane], [Dark], [Holy], or [Blood].\n"
+				"When you cast a spell with that tag, summon [{num_summons}:num_summons] living scrolls which cast your corresponding cantrip. The buff lasts 1 turn.").format(**self.fmt_dict())
+
+	def on_advance(self): ##Add metallic and chaos cantrips
+		tag = random.choice([Tags.Fire, Tags.Lightning, Tags.Ice, Tags.Nature, Tags.Arcane, Tags.Dark, Tags.Holy, Tags.Blood])
+		buff = OrdersBuff(self, tag)
+		buff.name = tag.name + " Orders"
+		self.owner.apply_buff(buff, self.get_stat('duration'))
+
+
+class Mechanize(Upgrade):
+	def on_init(self):
+		self.name = "Mechanize"
+		self.level = 5
+		self.tags = [Tags.Metallic]
+		self.asset = ["TcrsCustomModpack", "Icons", "mechanize"]
+		self.description = "When a [metallic] ally dies, a random ally gains 50% of the unit's max hp, and if non-metallic gains the [metallic] tag and resistances."
+
+		self.global_triggers[EventOnDeath] = self.on_death
+	
+	def on_death(self, evt):
+		if Tags.Metallic not in evt.unit.tags:
+			return
+		units = [u for u in self.owner.level.units if not u.is_player_controlled and not are_hostile(u, self.owner)]
+		if units == []:
+			return
+		unit = random.choice(units)
+		bonus = evt.unit.max_hp // 2
+		unit.max_hp += bonus
+		unit.cur_hp += bonus
+		if Tags.Metallic not in unit.tags:
+			BossSpawns.apply_modifier(BossSpawns.Metallic, unit)
+
+
+class SlimeCantripEducation(Spell):
+	def on_init(self):
+		self.name = "Slime Education"
+		self.description = "Grants one slime within 5 tiles a random level 1 sorcery. Does not pick slimes which already have 2 or more spells."
+		self.range = 0
+		self.cool_down = 2
+		self.radius = 5
+		
+	def get_nearby_slimes(self, x, y):
+		slimes = [u for u in self.caster.level.get_units_in_ball(Point(x, y), self.get_stat('radius')) if not are_hostile(u, self.caster) and Tags.Slime in u.tags and u != self.caster and len(u.spells) < 2]
+		if slimes == []:
+			return None
+		return slimes
+
+	def can_cast(self, x, y):
+		slimes = self.get_nearby_slimes(x, y)
+		if slimes == None:
+			return False
+		else:
+			return Spell.can_cast(self, x, y)
+
+	def get_ai_target(self):
+		slimes = self.get_nearby_slimes(self.owner.x, self.owner.y)
+		if slimes == None:
+			return None
+		else:
+			return self.caster
+
+	def cast(self, x, y): ##TODO test how they spend their turns with nobody to target.
+		slimes = self.get_nearby_slimes(x, y)
+		if not slimes:
+			return
+		slime = random.choice(slimes)
+		
+		cantrips = [Spells.FireballSpell, Spells.Icicle, Spells.LightningBoltSpell, Spells.PoisonSting, Spells.MagicMissile, Spells.DeathBolt, MetalShard, Improvise]
+		spell = random.choice(cantrips)()
+		spell.statholder = slime
+		spell.caster = slime
+		spell.owner = slime
+		
+		slime.spells.insert(0, spell)
+		yield
+
+def LearnedSlime():
+	unit = Unit()
+	unit.name = "Slime Scholar"
+	unit.max_hp = 10
+	unit.tags = [Tags.Slime]
+	unit.asset = ["TcrsCustomModpack", "Units", "slime_scholar"]
+
+	unit.spells.append(SlimeCantripEducation())
+	unit.buffs.append(SlimeBuff(spawner=LearnedSlime))
+
+	unit.resists[Tags.Poison] = 100
+	return unit
+
+class SlimeScholar(Upgrade):
+	def on_init(self):
+		self.name = "Slime Scholar"
+		self.level = 5
+		self.tags = [Tags.Arcane, Tags.Sorcery, Tags.Conjuration]
+		self.asset = ["TcrsCustomModpack", "Icons", "slime_scholar_icon"]
+		
+		self.global_triggers[EventOnUnitAdded] = self.on_unit_enter
+		self.count = 0
+		self.threshold = 100
+		self.minion_health = 10
+
+	def get_description(self):
+		return ("When slimes are summoned, including by splitting, gain 1 Oozing Knowledge for each max hp it has.\n"
+				"Each turn, consume up to 100 Oozing Knowledge to summon a slime scholar, which can teach a slime a cantrip, but only if it has less than 2 spells.\n"
+				"Oozing Knowledge: %d\n" % self.count)
+
+	def get_extra_examine_tooltips(self):
+		return [LearnedSlime()]
+
+	def on_advance(self):
+		if self.count < self.threshold:
+			return
+		self.count -= self.threshold
+		unit = LearnedSlime()
+		apply_minion_bonuses(self, unit)
+		self.summon(unit, radius=1)
+
+	def on_unit_enter(self, evt):
+		if evt.unit == self.owner:
+			self.count = 0
+			self.threshold = 100
+		if Tags.Slime in evt.unit.tags and not are_hostile(self.owner, evt.unit):
+			self.count += evt.unit.max_hp
+
+
+
+class Agoraphobia(Upgrade):  ##Possible crash from this. Hard to tell what happened.
+	def on_init(self):
+		self.name = "Agoraphobia"
+		self.level = 5
+		self.asset = ["TcrsCustomModpack", "Icons", "agoraphobia"]
+		
+		self.tags = [Tags.Enchantment, Tags.Eye]
+		self.damage = 15
+
+	def get_description(self):
+		return ("If you have 6 or more walls surrounding you, deal [{damage}_damage:damage] to one random enemy for each eye buff you have."
+				"\nThe damage type is the same as your eye buff, and Eye of Rage deals poison damage.").format(**self.fmt_dict())
+
+	def on_advance(self): ##TODO Probably can implement this as a queued spell for readability.
+		count = 0
+		tiles = self.owner.level.get_points_in_rect(self.owner.x-1, self.owner.y-1, self.owner.x+1, self.owner.y+1)
+		for t in tiles:
+			if self.owner.level.tiles[t.x][t.y].is_wall():
+				count += 1
+		if count < 6:
+			return
+		possible_targets = self.owner.level.units
+		possible_targets = [t for t in possible_targets if self.owner.level.are_hostile(t, self.owner)]
+		# visible_targets = [t for t in possible_targets if self.owner.level.can_see(t.x, t.y, self.owner.x, self.owner.y)]
+		# if not visible_targets == []:
+		# 	return
+		targets = [t for t in possible_targets if not self.owner.level.can_see(t.x, t.y, self.owner.x, self.owner.y)]
+		if targets == []:
+			return
+		for b in self.owner.buffs:
+			if isinstance(b, Spells.ElementalEyeBuff):
+				if possible_targets:
+					if isinstance(b, RageEyeBuff):
+						element = Tags.Poison
+					else:
+						element = b.element
+					res_targets = [t for t in possible_targets if t.resists[element] < 100]
+					if res_targets == []:
+						continue
+					target = random.choice(res_targets)
+					self.owner.level.deal_damage(target.x, target.y, self.get_stat('damage'), element, self)
+
+
+class BloodBagBuff(Buff):
+	def __init__(self, amount):
+		self.amount = amount
+		self.description = "Hemostasis: " + str(self.amount)
+		Buff.__init__(self)	
+
+	def on_init(self):
+		self.color = Tags.Blood.color
+		self.name = "Hemostasis"
+		self.description = "Reduce the hp cost of your next blood spell."
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		
+	def on_applied(self, owner):
+		for s in self.owner.spells:
+			if Tags.Blood not in s.tags:
+				continue
+			if s.hp_cost and s.hp_cost <= self.amount:
+				self.spell_bonuses[type(s)]['hp_cost'] = s.hp_cost * -1
+			else:
+				self.spell_bonuses[type(s)]['hp_cost'] = self.amount * -1
+		if self.amount > 0:
+			self.name = "Hemostasis:" + str(self.amount)
+
+
+	def on_cast(self, evt):
+		if not evt.pay_costs:
+			return
+		if Tags.Blood in evt.spell.tags and evt.spell.hp_cost:
+			self.amount -= evt.spell.hp_cost
+			if self.amount <= 0:
+				self.owner.remove_buff(self)
+				return
+			duration = self.turns_left
+			self.owner.remove_buff(self)
+			self.owner.apply_buff(BloodBagBuff(self.amount), duration)
+
+
+class ForcedDonation(Upgrade):
+	def on_init(self):
+		self.name = "Blood Drive"
+		self.level = 6
+		self.asset = ["TcrsCustomModpack", "Icons", "forced_donation"]
+		self.tags = [Tags.Blood]
+		
+		self.radius = 1
+		self.duration = 10
+
+	def get_description(self):
+		return ("Each turn, you drain the hp of one [living] or [demon] enemy unit within [{radius}_tiles:radius]. This is not damage and cannot be resisted. "
+				"The drain amount is the total hp cost of all blood spells you know.\n"
+				" Gain Hemostasis, causing blood spells to not pay hp costs, up to the amount of hp drained."
+				" The Buff lasts [{duration}_turns:duration], and is reduced by any hp costs paid with the buff.\n"
+				"If applied more than once, the buffs combine their total value.").format(**self.fmt_dict())
+
+	def on_advance(self):
+		hp_cost_total = 0
+		for s in self.owner.spells:
+			if s.hp_cost > hp_cost_total:
+				hp_cost_total += s.hp_cost
+		if hp_cost_total == 0:
+			return
+
+		units = self.owner.level.get_units_in_ball(Point(self.owner.x, self.owner.y), self.get_stat('radius'), diag=True)
+		units = [u for u in units if (Tags.Living in u.tags or Tags.Demon in u.tags) and are_hostile(self.owner, u)]
+		if units == []:
+			return
+
+		target = random.choice(units)
+		amount_drained = target.cur_hp 
+		target.cur_hp -= hp_cost_total
+		self.owner.level.show_effect(target.x, target.y, Tags.Blood, minor=False)
+		if target.cur_hp <= 0:
+			target.kill()
+		if hp_cost_total < amount_drained:
+			amount_drained = hp_cost_total
+			
+		prev_buff = self.owner.get_buff(BloodBagBuff)
+		if prev_buff != None:
+			amount_drained += prev_buff.amount
+			self.owner.remove_buff(prev_buff)
+		self.owner.apply_buff(BloodBagBuff(amount_drained), self.get_stat('duration'))
+
+
+def IceShambler(HP=1):
+	unit = Unit()
+	unit.max_hp = HP
+	unit.tags = [Tags.Elemental, Tags.Ice]
+	unit.resists[Tags.Ice] = 100
+	unit.resists[Tags.Fire] = -100
+
+	if HP >= 64:
+		unit.name = "Iceberg Shambler"
+		unit.asset = ["TcrsCustomModpack", "Units", "ice_shambler_large"]
+		unit.spells.append(SimpleRangedAttack(damage=16, range=4, damage_type=Tags.Ice, buff=FrozenBuff, buff_duration=1))
+	elif HP >= 8:
+		unit.name = "Ice Shambler"
+		unit.asset = ["TcrsCustomModpack", "Units", "ice_shambler_med"]
+		unit.spells.append(SimpleRangedAttack(damage=8, range=3, damage_type=Tags.Ice, buff=FrozenBuff, buff_duration=1))
+	else:
+		unit.name = "Icicle Shambler"
+		unit.asset = ["TcrsCustomModpack", "Units", "ice_shambler_small"]
+		unit.spells.append(SimpleRangedAttack(damage=4, range=2, damage_type=Tags.Ice, buff=FrozenBuff, buff_duration=1))
+
+	unit.description = "Jagged ice given life."
+	if HP >= 8:
+		unit.description += "  Splits into 4 smaller Ice Shamblers upon death."
+		unit.buffs.append(SplittingBuff(spawner=lambda : IceShambler(unit.max_hp // 4), children=4))
+		
+	return unit
+
+def IceShambler_Big(HP=64):
+	return IceShambler(64)
+
+def IceShambler_Med(HP=8):
+	return IceShambler(8)
+
+class IcyShambler(Upgrade):
+	def on_init(self):
+		self.name = "Shambling Frostspawn"
+		self.level = 7
+		self.tags = [Tags.Ice, Tags.Dark, Tags.Conjuration]
+		self.asset = ["TcrsCustomModpack", "Icons", "ice_shambler_icon"]
+		
+		self.global_triggers[EventOnDeath] = self.on_death
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
+		
+		self.minion_life = 1
+		self.minion_range = 4
+		self.minion_damage = 16
+		self.num_summons = 3
+		self.summon_cap = 0
+		self.count = 0
+		self.max_hp = 0
+
+	def get_description(self):
+		return ("After 6 [Ice] or [Undead] minions die, summon an icy shambler with their total max hp. Each realm can trigger this effect [{num_summons}:num_summons] times.").format(**self.fmt_dict())
+
+	def get_extra_examine_tooltips(self):
+		return [IceShambler(1), IceShambler_Med(8), IceShambler_Big(64)]
+
+	def on_enter(self, evt):
+		self.count = 0
+		self.summon_cap = 0
+		self.max_hp = 0
+
+	def on_death(self, evt):
+		if are_hostile(self.owner, evt.unit):
+			return
+		if Tags.Ice not in evt.unit.tags and Tags.Undead not in evt.unit.tags:
+			return
+		if self.summon_cap == self.get_stat('num_summons'):
+			return
+		self.count += 1
+		self.max_hp += evt.unit.max_hp
+		if self.count == 6:
+			self.summon_cap += 1
+			self.count = 0
+			unit = IceShambler(self.max_hp)
+			apply_minion_bonuses(self, unit)
+			unit.max_hp = self.max_hp
+			self.summon(unit=unit, target=Point(self.owner.x, self.owner.y))
+			self.max_hp = 0
 
 ## ------------------------------------------ TODO Implementation Zone -------------------------------------------------------
-
 
 def construct_skills():
 	skillcon = [FromAshes, Lucky13, PsionicBlast, Crescendo, Librarian, BoneShaping, Chiroptyvern, Condensation, Discharge, PoisonousCopy, 
 				IcyVeins, HolyMetalLantern, NightsightLantern, ContractFromBelow, MageArmor, Friction, Accelerator, ArclightEagle, Scrapheap, WeaverOfElements,
 				WeaverOfOccultism, WeaverOfMaterialism, Mathemagics, QueenOfTorment, Cloudcover, WalkTheOrb, EyeSpellTrigger, Overheal, RimeorbLantern,
-				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord]
+				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord,
+				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler]
 	## AngularGeometry
+	print("Added " + str(len(skillcon)) + " skills")
 	for s in skillcon:
 		Upgrades.skill_constructors.extend([s])

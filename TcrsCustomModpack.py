@@ -4,6 +4,7 @@ sys.path.append('../..')
 import time
 from Equipment import *
 from Level import *
+from LevelGen import LevelGenerator, LEVEL_SIZE
 import mods.TcrsCustomModpack.CustomSpells as cust_spells
 import mods.TcrsCustomModpack.CustomSkills as cust_skills
 
@@ -12,6 +13,7 @@ print(time.asctime())
 
 cust_spells.construct_spells()
 cust_skills.construct_skills()
+
 
 Level.EventOnMakeFloor = namedtuple("EventOnMakeFloor", "x y was_chasm was_wall")
 
