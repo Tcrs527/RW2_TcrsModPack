@@ -13,7 +13,7 @@ import math
 import copy
 
 from mods.TcrsCustomModpack.SharedClasses import *
-from mods.TcrsCustomModpack.CustomSpells import MetalShard, Improvise
+from mods.TcrsCustomModpack.CustomSpells import MetalShard, Improvise, OpalescentEyeBuff
 
 print("Custom Skills Loaded")
 
@@ -1293,7 +1293,7 @@ class EyeSpellTrigger(Upgrade):
 			return
 		eyebuffs = []
 		for b in self.owner.buffs:
-			if isinstance(b, (FireEyeBuff, IceEyeBuff, LightningEyeBuff, RageEyeBuff)):
+			if isinstance(b, (FireEyeBuff, IceEyeBuff, LightningEyeBuff, RageEyeBuff, OpalescentEyeBuff)):
 				eyebuffs.append(b)
 		if eyebuffs == []:
 			return
@@ -2483,7 +2483,7 @@ class ForcedDonation(Upgrade):
 def IceShambler(HP=1):
 	unit = Unit()
 	unit.max_hp = HP
-	unit.tags = [Tags.Elemental, Tags.Ice]
+	unit.tags = [Tags.Elemental, Tags.Ice, Tags.Undead]
 	unit.resists[Tags.Ice] = 100
 	unit.resists[Tags.Fire] = -100
 
@@ -2500,7 +2500,7 @@ def IceShambler(HP=1):
 		unit.asset = ["TcrsCustomModpack", "Units", "ice_shambler_small"]
 		unit.spells.append(SimpleRangedAttack(damage=4, range=2, damage_type=Tags.Ice, buff=FrozenBuff, buff_duration=1))
 
-	unit.description = "Jagged ice given life."
+	unit.description = "Jagged ice and marrow given unlife."
 	if HP >= 8:
 		unit.description += "  Splits into 4 smaller Ice Shamblers upon death."
 		unit.buffs.append(SplittingBuff(spawner=lambda : IceShambler(unit.max_hp // 4), children=4))
@@ -2560,6 +2560,141 @@ class IcyShambler(Upgrade):
 			self.summon(unit=unit, target=Point(self.owner.x, self.owner.y))
 			self.max_hp = 0
 
+
+class SixthSenseBuff(Buff):
+	def on_init(self):
+		self.global_bonuses['requires_los'] = -1
+		self.global_bonuses['range'] = 6
+		self.description = "May cast spells without line of sight"
+		self.name = "Sixth Sense"
+
+class SixthSense(Upgrade):
+	def on_init(self):
+		self.name = "Sixth Sense"
+		self.level = 6
+		self.tags = [Tags.Eye]
+		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
+		self.count_turn = 12
+		self.count_spell = 6
+
+	def get_description(self):
+		return ("After 6 eye spells are cast or when 12 turns pass, gain sixth sense for 1 turn.\n"
+				"Sixth Sense grants your spells 6 bonus range and removes the line of sight requirement.\n"
+				"Turns Remaining: %d\n"
+				"Spells Remaining: %s"% (self.count_turn, self.count_spell)).format(**self.fmt_dict())
+
+	def on_advance(self):
+		self.count_turn -= 1
+		if self.count_turn <= 0:
+			self.owner.apply_buff(SixthSenseBuff(), 1)
+			self.count_turn = 12
+			
+	def on_spell_cast(self, evt):
+		if Tags.Eye not in evt.spell.tags:
+			return
+		self.count_spell -= 1
+		if self.count_spell <= 0:
+			self.owner.apply_buff(SixthSenseBuff(), 2)
+			self.count_spell = 6
+
+
+class SpeakerForDead(Upgrade):
+	def on_init(self):
+		self.name = "Speaker for the Dead"
+		self.level = 6
+		self.tags = [Tags.Dark, Tags.Word]
+		self.description = "For every X undead units that die, cast one of your word spells randomly. If you have no word spells cast word of undeath. This skill has 1 charge which refresh each realm."
+
+		self.global_triggers[EventOnDeath] = self.on_death
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
+		self.cur_charges = 1
+		self.count = 15
+		
+	def on_enter(self, evt):
+		self.count = 15
+		word_charges = self.owner.tag_bonuses[Tags.Word]['max_charges'] * (1 + self.owner.tag_bonuses_pct[Tags.Word]['max_charges'])
+		dark_charges = self.owner.tag_bonuses[Tags.Dark]['max_charges'] * (1 + self.owner.tag_bonuses_pct[Tags.Dark]['max_charges'])
+		self.cur_charges = word_charges + dark_charges
+
+	def on_death(self, evt):
+		if not Tags.Undead in evt.unit.tags:
+			return
+		if self.cur_charges <= 0:
+			return
+		self.count -= 1
+		if self.count > 0:
+			return
+		self.count = 15
+		word_spells = []
+		for s in self.owner.spells:
+			if Tags.Word in s.tags:
+				word_spells.append(s)
+		if self.cur_charges < 1:
+			return
+		self.cur_charges -= 1
+		if word_spells == []:
+			word = self.owner.get_or_make_spell(WordOfUndeath)
+		else:
+			random.shuffle(word_spells)
+			word = self.owner.get_or_make_spell(type(word_spells[0]))
+		self.owner.level.act_cast(self.owner, word, self.owner.x, self.owner.y, pay_costs=False)
+	
+
+class PotionRecycler(Upgrade):
+	def on_init(self):
+		self.name = "Potion Recycler"
+		self.level = 0
+		self.tags = [Tags.Chaos, Tags.Metallic]
+		self.description = "When you use a potion, make a new potion on a random tile somewhere in the level. Triggers once per realm."
+
+
+class NarrowSouled(Upgrade):
+	def on_init(self):
+		self.name = "Narrow Souled"
+		self.level = 0
+		self.tags = [Tags.Arcane, Tags.Dark, Tags.Chaos]
+		self.trigger = False
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
+		self.description = ("On the 4th turn of each realm if you cast an arcane spell, you also use an Aether Dagger item.\n"+
+							"This happens for the 6th turn with a dark spell, and death dice, and the 8th turn with a chaos spell, and chaos bell."
+							"You can only trigger this effect once per realm.")
+	
+	def on_enter(self, evt):
+		self.trigger = False
+
+	def on_cast(self, evt):
+		turn = self.owner.level.turn_no
+		if self.trigger == True:
+			return
+		if not (Tags.Arcane in evt.spell.tags or Tags.Dark in evt.spell.tags or Tags.Chaos in evt.spell.tags):
+			return
+		print(turn)
+		
+		spell = None
+		if Tags.Arcane in evt.spell.tags and turn == 4:
+			spell = AetherDaggerSpell()
+			spell.on_init()
+			spell.name = "Aether Dagger"
+			print(spell)
+		if Tags.Dark in evt.spell.tags and turn == 6:
+			spell = DeathDiceSpell()
+			spell.on_init()
+			spell.name = "Death Dice"
+		if Tags.Chaos in evt.spell.tags and turn == 8:
+			spell = ChaosBellSpell()
+			spell.on_init()
+			spell.name = "Chaos Bell"
+
+		if spell == None:
+			return
+		spell.owner = self.owner
+		spell.caster = self.owner
+		spell.item = True
+		self.trigger = True
+		self.owner.level.act_cast(self.owner, spell, self.owner.x, self.owner.y, pay_costs=False)
+		
+
 ## ------------------------------------------ TODO Implementation Zone -------------------------------------------------------
 
 def construct_skills():
@@ -2567,7 +2702,8 @@ def construct_skills():
 				IcyVeins, HolyMetalLantern, NightsightLantern, ContractFromBelow, MageArmor, Friction, Accelerator, ArclightEagle, Scrapheap, WeaverOfElements,
 				WeaverOfOccultism, WeaverOfMaterialism, Mathemagics, QueenOfTorment, Cloudcover, WalkTheOrb, EyeSpellTrigger, Overheal, RimeorbLantern,
 				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord,
-				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler]
+				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler,
+				SixthSense, SpeakerForDead, NarrowSouled ]
 	## AngularGeometry
 	print("Added " + str(len(skillcon)) + " skills")
 	for s in skillcon:

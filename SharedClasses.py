@@ -215,6 +215,23 @@ class PoisonCloud(Cloud):
 				self.buff = None
 		self.level.deal_damage(self.x, self.y, self.damage, Tags.Poison, self)
 
+class Sandstorm(Cloud):
+	def __init__(self, owner, damage=2):
+		Cloud.__init__(self)
+		self.owner = owner
+		self.duration = 4
+		self.damage = damage
+		self.color = Tags.Nature.color
+		self.name = "Sandstorm"
+		self.description = "Every turn, deals %d physical damage to any creature standing within, then blinds them." % self.damage
+		self.asset = ['TcrsCustomModpack', 'Tiles' ,'sandstorm_3']
+		self.buff_turns = 1
+
+	def on_advance(self):
+		unit = self.level.get_unit_at(self.x, self.y)
+		if unit and unit.resists[Tags.Physical] < 100:
+			unit.apply_buff(BlindBuff(), self.buff_turns)
+		self.level.deal_damage(self.x, self.y, self.damage, Tags.Physical, self)
 
 class Hole(Cloud):
 
