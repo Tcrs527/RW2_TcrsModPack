@@ -185,8 +185,6 @@ class PoisonCloud_Old(Cloud): ##In case I want to keep the old method and remove
 		unit = self.level.get_unit_at(self.x, self.y)
 		if unit and unit.resists[Tags.Poison] < 100:
 			buff = copy.deepcopy(self.buff)
-			print(buff.name)
-			print(buff)
 			unit.apply_buff(Poison(), self.buff_turns)
 			if buff != None:
 				unit.apply_buff(buff, self.buff_turns)
@@ -216,22 +214,23 @@ class PoisonCloud(Cloud):
 		self.level.deal_damage(self.x, self.y, self.damage, Tags.Poison, self)
 
 class Sandstorm(Cloud):
-	def __init__(self, owner, damage=2):
+	def __init__(self, owner, damage=2, duration=5, buff_duration=1):
 		Cloud.__init__(self)
-		self.owner = owner
-		self.duration = 4
 		self.damage = damage
+		self.owner = owner
+		self.source = None
+		self.duration = duration
+		self.buff_duration = buff_duration
 		self.color = Tags.Nature.color
 		self.name = "Sandstorm"
 		self.description = "Every turn, deals %d physical damage to any creature standing within, then blinds them." % self.damage
 		self.asset = ['TcrsCustomModpack', 'Tiles' ,'sandstorm_3']
-		self.buff_turns = 1
 
 	def on_advance(self):
 		unit = self.level.get_unit_at(self.x, self.y)
 		if unit and unit.resists[Tags.Physical] < 100:
-			unit.apply_buff(BlindBuff(), self.buff_turns)
-		self.level.deal_damage(self.x, self.y, self.damage, Tags.Physical, self)
+			unit.apply_buff(BlindBuff(), self.buff_duration)
+		self.level.deal_damage(self.x, self.y, self.damage, Tags.Physical, self.source)
 
 class Hole(Cloud):
 
