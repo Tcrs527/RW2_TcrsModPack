@@ -1,7 +1,5 @@
-from lzma import CHECK_SHA256
 import sys
 
-from RareMonsters import BatDragon
 sys.path.append('../..')
 
 import Spells
@@ -9,12 +7,13 @@ import Upgrades
 from Game import *
 from Level import *
 from Monsters import *
+from RareMonsters import BatDragon
 from copy import copy
 import math
 import copy
 
 from mods.TcrsCustomModpack.SharedClasses import *
-from mods.TcrsCustomModpack.CustomSpells import MetalShard, Improvise, OpalescentEyeBuff, SeaSerpent, SeaWyrmBreath
+from mods.TcrsCustomModpack.CustomSpells import MetalShard, Improvise, OpalescentEyeBuff, SeaSerpent, SeaWyrmBreath, SummonEyedra, ShrapnelBreath, SteelFangs, SummonBookwyrm, ScrollBreath
 
 print("Custom Skills Loaded")
 
@@ -325,7 +324,7 @@ class Chiroptyvern(Upgrade):
 		self.minion_health = ChiroDragon().max_hp
 		self.minion_damage = ChiroDragon().spells[1].damage
 		self.minion_range = ChiroDragon().spells[0].range
-		self.breath_damage = ChiroDragon().spells[0].damage
+		#self.breath_damage = ChiroDragon().spells[0].damage
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.dark_spell_evt = 0
 
@@ -341,10 +340,11 @@ class Chiroptyvern(Upgrade):
 			self.dark_spell_evt += evt.spell.level
 		elif Tags.Dragon in evt.spell.tags and self.dark_spell_evt >= 5:
 			drag = ChiroDragon()
-			drag.max_hp = self.get_stat('minion_health')
-			drag.spells[0].damage = self.get_stat('breath_damage')
-			drag.spells[0].range = self.get_stat('minion_range')
-			drag.spells[1].damage = self.get_stat('minion_damage')
+			apply_minion_bonuses(self, drag)
+			#drag.max_hp = self.get_stat('minion_health')
+			#drag.spells[0].damage = self.get_stat('breath_damage')
+			#drag.spells[0].range = self.get_stat('minion_range')
+			#drag.spells[1].damage = self.get_stat('minion_damage')
 			self.summon(drag)
 			self.dark_spell_evt = 0
 		
@@ -1506,7 +1506,7 @@ class RiotscaleBreath(BreathWeapon):
 class ChaosScaleBuff(Buff):
 	def __init__(self, skill):
 		self.skill = skill
-		self.breath_damage = skill.get_stat('breath_damage')
+		self.minion_damage = skill.get_stat('minion_damage') #TODO check breath damage
 		self.range = self.skill.get_stat('range')
 		self.cooldown = 2
 		Buff.__init__(self)
@@ -1529,7 +1529,7 @@ class ChaosScaleBuff(Buff):
 		breath = self.owner.get_or_make_spell(RiotscaleBreath)
 		breath.range = self.range
 		breath.source = self
-		breath.damage = self.breath_damage
+		breath.damage = self.minion_damage
 		unit = random.choice(targets)
 		self.owner.level.act_cast(self.owner, breath, unit.x, unit.y, pay_costs=False)
 		self.range = self.skill.get_stat('range')
@@ -1543,13 +1543,13 @@ class ChaosScaleLantern(Upgrade):
 		self.level = 4
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		
-		self.breath_damage = 20
+		self.minion_damage = 20
 		self.range = 4
 
 	def get_description(self):
 		return ("Whenever you cast a [Dragon] or [Chaos] spell, gain Riotscale Rage with duration equal to the spell's level. Dragon spells give 3 times their level.\n"
 				"The buff gives you an automatic level 1 [dragon] [chaos] breath attack with a 1 turn cooldown.\n"
-				" The breath attack has a default range of [{range}_tile:range] and deals [{breath_damage}_:dragon] [Physical], [Fire], or [Lightning] damage randomly."
+				" The breath attack has a default range of [{range}_tile:range] and deals [{minion_damage}_:dragon] [Physical], [Fire], or [Lightning] damage randomly."
 				" Each turn the breath gains 1 range, but when it activates its range resets.").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
@@ -1568,62 +1568,68 @@ class AuraReading(Upgrade):
 		self.tags = [Tags.Arcane, Tags.Dark, Tags.Enchantment] ##TODO implement modifiable aura damage on inferno engines.
 		self.asset = ["TcrsCustomModpack", "Icons", "aura_reading"]
 		
+		self.global_triggers[EventOnUnitAdded] = self.on_enter
 		self.global_triggers[EventOnBuffApply] = self.buff_applied
 		self.global_triggers[EventOnBuffRemove] = self.buff_removed
 		self.global_triggers[EventOnDeath] = self.on_death
-		self.aura = 0
-		self.threshold = 50
 		
 		self.minion_health = 55
 		self.minion_damage = 12
-		self.minion_duration = 15
+		self.duration = 20
 
 	def get_description(self):
-		return ("When an aura is given to a unit, that unit also gains a 2 damage physical aura with the same size and duration.\n" +
-				"When a unit's aura ends, gain auric power equal to that aura's total damage. If your auric power is greater than 50, spend 50 to summon an elephant.\n"
-				"The elephant lasts [{minion_duration}_turns:minion_duration] turns."
-				"You can only summon 1 per turn.").format(**self.fmt_dict())
+		return ("When an ally enters with, or is given, a damaging aura, that unit also gains a 2 damage physical aura with the same size for [{duration}_turns:duration] turns.\n" +
+				"When a unit's aura ends, summon an elephant which lasts for 1 turn for each 10 damage the aura did.\n").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
 		return [CorruptElephant()]
 
-	def on_death(self, evt):
-		if not evt.unit.has_buff(DamageAuraBuff):
+	def copy_aura(self, aura):
+		buff = DamageAuraBuff(damage=2, radius=aura.radius, damage_type=[Tags.Physical], friendly_fire=False)
+		buff.stack_type = STACK_REPLACE
+		buff.color = Tags.Physical.color
+		buff.name = "Physical Aura"
+		buff.source = self
+		return buff
+
+	def on_enter(self, evt):
+		if are_hostile(self.owner, evt.unit):
 			return
-		buff = evt.unit.get_buff(DamageAuraBuff)
-		self.aura += buff.damage_dealt
+		aura = evt.unit.get_buff(DamageAuraBuff)
+		if aura == None:
+			return
+		if aura.name == "Physical Aura":
+			return
+		buff = self.copy_aura(aura)
+		evt.unit.apply_buff(buff, self.get_stat('duration'))
 
 	def buff_applied(self, evt):
-		if isinstance(evt.buff, DamageAuraBuff) and evt.buff.name != "Physical Aura": ##TODO check to see if enemy auras grant them a version of this. I think it will.
-			#print("Applying Buff")
-			buff = DamageAuraBuff(damage=2, radius=evt.buff.radius, damage_type=[Tags.Physical], friendly_fire=False)
-			buff.stack_type = STACK_REPLACE
-			buff.color = Tags.Physical.color
-			buff.name = "Physical Aura"
-			buff.source = self
-			evt.unit.apply_buff(buff, evt.buff.turns_left)
-			#print("Buff Applied")
+		if are_hostile(self.owner, evt.unit):
+			return
+		if not isinstance(evt.buff, DamageAuraBuff) or evt.buff.name == "Physical Aura":
+			return
+		buff = self.copy_aura(evt.buff)
+		evt.unit.apply_buff(buff, self.get_stat('duration'))
+
+	def spawn_pachyderm(self, duration):
+		if duration <= 0:
+			return
+		unit = CorruptElephant()
+		unit.turns_to_death = duration
+		apply_minion_bonuses(self, unit)
+		self.owner.level.summon(owner=self.owner, unit=unit, target=self.owner)
+
+	def on_death(self, evt):
+		buff = evt.unit.get_buff(DamageAuraBuff)
+		if buff == None:
+			return
+		duration = buff.damage_dealt // 10
+		self.spawn_pachyderm(duration)
 
 	def buff_removed(self, evt):
 		if isinstance(evt.buff, DamageAuraBuff):
-			#print(evt.buff.damage_dealt)
-			self.spawn_pachyderm(evt.buff.damage_dealt)
-		
-	def on_advance(self):
-		if self.aura > self.threshold:
-			self.aura -= self.threshold
-			unit = CorruptElephant()
-			apply_minion_bonuses(self, unit)
-			self.owner.level.summon(owner=self.owner, unit=unit, target=self.owner)
-
-	## "When 100 damage is dealt by any unit's aura, grant one random ally an aura dealing the same damage as their first spell, or arcane damage if that spell deals no
-	## damage, for 15 turns." INCREDIBLY hard to implement with how damage sources work, abandon all hope ye who enter here. At best I can check if the source uses aura damage?
-	#self.global_triggers[EventOnDamaged] = self.on_damage
-	#def on_damage(self, evt):
-	#	print(evt.source)
-	#	if not isinstance(evt.source, DamageAuraBuff):
-	#		return
-	#	print("AURA FOUND")
+			duration = evt.buff.damage_dealt // 10
+			self.spawn_pachyderm(duration)
 
 class HindsightImmunity(Buff):
 	def __init__(self, buff):
@@ -1800,7 +1806,7 @@ class VoidCaller(Upgrade):
 		
 		self.minion_health = 75
 		self.minion_damage = 14
-		self.breath_damage = 9
+		#self.breath_damage = 9 #Commented out in case breath damage returns
 		
 	def get_extra_examine_tooltips(self):
 		return [VoidWyrm(), GoldWyrm()]
@@ -1815,9 +1821,11 @@ class VoidCaller(Upgrade):
 			unit = VoidWyrm()
 		else:
 			unit = GoldWyrm()
-		unit.max_hp = self.get_stat('minion_health')
-		unit.spells[0].damage = self.get_stat('breath_damage')
-		unit.spells[1].damage = self.get_stat('minion_damage')
+
+		apply_minion_bonuses(self, unit)
+		#unit.max_hp = self.get_stat('minion_health')
+		#unit.spells[0].damage = self.get_stat('breath_damage')
+		#unit.spells[1].damage = self.get_stat('minion_damage')
 		return unit
 
 	def on_floor(self, evt):
@@ -2616,7 +2624,8 @@ class SpeakerForDead(Upgrade):
 		self.level = 6
 		self.tags = [Tags.Dark, Tags.Word]
 		self.asset = ["TcrsCustomModpack", "Icons", "speaker_for_dead"] ##Slightly modified skeleton and bone wizard
-		self.description = "For every 15 undead units that die, cast one of your word spells randomly. If you have no word spells cast word of undeath. This skill has 1 charge(s) which refresh each realm."
+		self.description = ("For every 15 undead units that die, cast one of your word spells randomly. If you have no word spells cast word of undeath." +
+							"\nThis skill has 1 charge(s) which refresh each realm, and scales with bonuses to max charges.")
 
 		self.global_triggers[EventOnDeath] = self.on_death
 		self.owner_triggers[EventOnUnitAdded] = self.on_enter
@@ -2656,15 +2665,15 @@ class SpeakerForDead(Upgrade):
 class NarrowSouled(Upgrade):
 	def on_init(self):
 		self.name = "Narrow Souled"
-		self.level = 5
+		self.level = 4
 		self.tags = [Tags.Arcane, Tags.Dark, Tags.Chaos]
 		self.asset = ["TcrsCustomModpack", "Icons", "narrow_souled"] ##Soul tax recolour + aether dagger colours.
 		self.trigger = False
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.owner_triggers[EventOnUnitAdded] = self.on_enter
-		self.description = ("On the 4th turn of each realm if you cast an arcane spell, you also use an Aether Dagger item.\n"+
-							"This happens for the 6th turn with a dark spell, and death dice, and the 8th turn with a chaos spell, and chaos bell."
-							"You can only trigger this effect once per realm.")
+		self.description = ("On the 4th turn of each realm if you cast an [arcane] spell, you also use an Aether Dagger item.\n" +
+							"This happens for the 6th turn with a [dark] spell, and the Death Dice item, and the 8th turn with a [chaos] spell, and the Chaos Bell item." +
+							"\nYou can only trigger this effect once per realm.").format(**self.fmt_dict())
 	
 	def on_enter(self, evt):
 		self.trigger = False
@@ -2707,21 +2716,27 @@ class FireBreathing(Upgrade):
 		self.asset = ["TcrsCustomModpack", "Icons", "chromatic_breath"] ##Player + recoloured dragon breath sprite
 		self.owner_triggers[EventOnBuffApply] = self.on_buff	
 		self.range = 7
-		self.description = "Once per turn, when you are inflicted by a debuff, you use a breath weapon on an enemy. The breath is randomly chosen from your dragon spells which have breath damage."
+		self.description = ("Once per turn, when you are inflicted by a debuff, you use a breath weapon on a random enemy within [{range}_tiles:range]."
+							"\nThe breath is randomly chosen from your dragon spells which have a breath weapon.").format(**self.fmt_dict())
 		self.dragon_dict = {SummonFireDrakeSpell:FireBreath, SummonStormDrakeSpell:StormBreath, SummonIceDrakeSpell:IceBreath, 
 							SummonVoidDrakeSpell:VoidBreath, SummonGoldDrakeSpell:HolyBreath, WyrmEggs:random.choice([FireBreath, IceBreath]),
-							SeaSerpent:SeaWyrmBreath}
+							SeaSerpent:SeaWyrmBreath, SummonEyedra:VoidBreath, SteelFangs:ShrapnelBreath,
+							SummonFrostfireHydra:random.choice([FireBreath, IceBreath]), SummonBookwyrm:ScrollBreath}
 
 	def on_buff(self, evt):
 		if not evt.buff.applied:
 			return
 		if evt.buff.buff_type != BUFF_TYPE_CURSE: ##Doesn't include soaked, should it? Very easy to apply.
 			return
-		spells = [s for s in self.owner.spells if Tags.Dragon in s.tags and hasattr(s, 'breath_damage')]
+		spells = [s for s in self.owner.spells if Tags.Dragon in s.tags and hasattr(s, 'minion_damage')]
 		if spells == []:
 			return
 		spell = random.choice(spells)
-		breath = self.dragon_dict[type(spell)]()
+		if type(spell) not in self.dragon_dict:
+			print("not found")
+			breath = random.choice([FireBreath, IceBreath, StormBreath, VoidBreath, HolyBreath])
+		else:
+			breath = self.dragon_dict[type(spell)]()
 		breath.item = False
 		breath.source = self
 		breath.caster = self.owner
@@ -2796,7 +2811,7 @@ class RenounceDarkness(Upgrade):
 		
 		self.resists[Tags.Dark] = 25
 		self.owner_triggers[EventOnUnitAdded] = self.on_enter
-		self.description = ("At the start and end of each turn, transfer all charges for all [dark], [chaos], and [blood] spells to your [holy] and [nature] spells. " +
+		self.description = ("At the start and end of each turn, transfer charges from your [dark], [chaos], and [blood] spells to your [holy] and [nature] spells. " +
 		"Transfers 33% of the charges, rounded down, to the first [nature] or [holy] spell of the same or lower level in your spells." +
 		"\nWhen you enter a realm gain +1 [holy] and [nature] damage for each level of those spells you have.")
 
