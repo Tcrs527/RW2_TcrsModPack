@@ -353,9 +353,9 @@ class Chiroptyvern(Upgrade):
 class Condensation(Upgrade):
 	def on_init(self):
 		self.name = "Condensation"
-		self.tags = [Tags.Ice, Tags.Nature, Tags.Conjuration]
+		self.tags = [Tags.Ice, Tags.Lightning, Tags.Nature, Tags.Slime]
 		self.asset = ["TcrsCustomModpack", "Icons", "condensation"]
-		self.level = 6 ##very strong with stormcaller, not amazingly OP on its own.
+		self.level = 8
 		
 		self.radius = 1
 		self.minion_health = 10
@@ -363,10 +363,10 @@ class Condensation(Upgrade):
 		self.minion_range = 3
 		
 	def get_description(self):
-		return ("Each turn, convert blizzard clouds or rain clouds within [{radius}_tile:radius] tile(s) into ice slimes or water elementals respectively.").format(**self.fmt_dict())		
+		return ("Each turn, convert blizzard clouds, thunder storms, and rain clouds within [{radius}_tile:radius] tile(s) into ice slimes, electric slimes, and water elementals respectively.").format(**self.fmt_dict())		
 
 	def get_extra_examine_tooltips(self):
-		return [IceSlime(), WaterElemental()]
+		return [IceSlime(), ElectricSlime(), WaterElemental()]
 
 	def on_advance(self):
 		for p in self.owner.level.get_points_in_rect(self.owner.x - self.radius, self.owner.y - self.radius, self.owner.x + self.radius, self.owner.y + self.radius):
@@ -374,6 +374,11 @@ class Condensation(Upgrade):
 			if isinstance(tile.cloud, BlizzardCloud):
 				tile.cloud.kill()
 				unit = IceSlime()
+				apply_minion_bonuses(self, unit)
+				self.summon(unit=unit, target=tile)
+			if isinstance(tile.cloud, StormCloud):
+				tile.cloud.kill()
+				unit = ElectricSlime()
 				apply_minion_bonuses(self, unit)
 				self.summon(unit=unit, target=tile)
 			elif isinstance(tile.cloud, RainCloud):
@@ -900,17 +905,19 @@ class WeaverOfElements(Upgrade):
 		self.name = "Weave the Elements"
 		self.tags = [Tags.Fire, Tags.Ice, Tags.Lightning]
 		self.asset = ["TcrsCustomModpack", "Icons", "weaver_of_elements"]
-		self.description = ("For every 3 [Fire], [Ice], or [Lightning] spells you cast, deal damage in a line between the target tile and the other spell's target tiles.\n" +
-							"Deal [fire] damage if any of the spells had the [fire] tag, then repeat for [Ice] and [Lightning].\n"
-							"Does not hurt you. Does work with free spells.")
-		self.level = 5
+		self.level = 4
 		
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.damage = 5
 		self.points = []
 		self.spell_tags = []
-	
+		self.description = ("For every 3 [Fire], [Ice], or [Lightning] spells you cast, deal [{damage}_damage:damage] in a line between the target tile and the other spell's target tiles.\n" +
+							"Deal [fire] damage if any of the spells had the [fire] tag, then repeat for [Ice] and [Lightning].\n"
+							"Does not hurt you.\nDoes not work with free spells.").format(**self.fmt_dict())	
+
 	def on_cast(self, evt):
+		if not evt.pay_costs:
+			return
 		if Tags.Fire in evt.spell.tags or Tags.Ice in evt.spell.tags or Tags.Lightning in evt.spell.tags:
 			p = Point(evt.x, evt.y)
 			self.points.append(p)
@@ -999,12 +1006,12 @@ def MaterialSlime():
 class WeaverOfMaterialism(Upgrade):
 	def on_init(self):
 		self.name = "Weave the Material"
-		self.tags = [Tags.Nature, Tags.Dragon, Tags.Metallic]
+		self.tags = [Tags.Nature, Tags.Dragon, Tags.Metallic, Tags.Slime]
 		self.asset = ["TcrsCustomModpack", "Icons", "weaver_of_material"]
 		self.description = ("For every 3 [nature], [dragon], and [metallic] spells you cast, summon a slime at the third spell's target tile.\n" +
 							"If the [nature] tag was in any spell, the slime gains max hp and spawns additional green slimes.\n"
 							"If the [dragon] tag was in any spell, it gains a breath attack.\n"
-							"If the [metallic] tag was in any spell, it gains metallic resistances and melee retaliation damage.\n"
+							"If the [metallic] tag was in any spell, it gains metallic resistances and melee retaliation damage.\n" ##TODO implement slime
 							"Does not work with free spells.").format(**self.fmt_dict())
 		self.level = 7 ##Change this to every 3 spells cast
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
@@ -2334,7 +2341,7 @@ class SlimeScholar(Upgrade):
 	def on_init(self):
 		self.name = "Slime Scholar"
 		self.level = 5
-		self.tags = [Tags.Arcane, Tags.Sorcery, Tags.Conjuration]
+		self.tags = [Tags.Arcane, Tags.Sorcery, Tags.Conjuration, Tags.Slime]
 		self.asset = ["TcrsCustomModpack", "Icons", "slime_scholar_icon"]
 		
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_enter
@@ -2877,7 +2884,51 @@ class OnewithNothing(Upgrade):
 				spell.damage += 1
 		
 
+class DazzlingMovement(Upgrade):
+	def on_init(self):
+		self.name = "Dazzling Movement"
+		self.level = 4
+		self.tags = [Tags.Holy, Tags.Translocation]
+		self.owner_triggers[EventOnMoved] = self.on_move
+		self.asset = ["TcrsCustomModpack", "Icons", "dazzling_movement"]
+		
+		self.damage = 10
+		self.charges = 0
+		self.radius = 10
+		self.moved = True
+
+	def get_description(self):
+		return ("Each time that you move, gain a charge. Teleporting grants 2 charges.\n"
+				"On a turn that you don't move, consume all charges to deal damage in a burst, growing by 1 tile for every 2 charges.\n"
+				"The burst deals [{damage}_holy:holy] with a [{radius}_tile:radius] tiles at max charges."
+				" %d charges" % self.charges).format(**self.fmt_dict())
+
+	def on_move(self, evt):
+		if evt.teleport == True:
+			self.charges += 2
+		else:
+			self.charges += 1
+		if self.charges > self.radius * 2:
+			self.charges = self.radius * 2
+		self.moved = True
+		
+	def on_advance(self):
+		if self.charges == 0:
+			return
+		if self.moved:
+			self.moved = False
+			return
+		radius = math.floor(self.charges / 2)
+		for stage in Burst(self.owner.level, self.owner, radius):
+			for point in stage:
+				if point.x == self.owner.x and point.y == self.owner.y:
+					continue
+				self.owner.level.deal_damage(point.x, point.y, self.get_stat('damage'), Tags.Holy, self)
+		self.charges = 0
+		self.moved = False
+
 ## ------------------------------------------ TODO Implementation Zone -------------------------------------------------------
+
 
 def construct_skills():
 	skillcon = [FromAshes, Lucky13, PsionicBlast, Crescendo, Librarian, BoneShaping, Chiroptyvern, Condensation, Discharge, PoisonousCopy, 
@@ -2885,7 +2936,7 @@ def construct_skills():
 				WeaverOfOccultism, WeaverOfMaterialism, Mathemagics, QueenOfTorment, Cloudcover, WalkTheOrb, EyeSpellTrigger, Overheal, RimeorbLantern,
 				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord,
 				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler,
-				SixthSense, SpeakerForDead, NarrowSouled, FireBreathing, VowOfPoverty, RenounceDarkness]
+				SixthSense, SpeakerForDead, NarrowSouled, FireBreathing, VowOfPoverty, RenounceDarkness, DazzlingMovement]
 	## AngularGeometry OneWithNothing
 	print("Added " + str(len(skillcon)) + " skills")
 	for s in skillcon:
