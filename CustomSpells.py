@@ -6521,6 +6521,8 @@ class TrueNameEffect(Buff):
 	def on_cast(self, evt):
 		if evt.caster.name == self.target:
 			self.owner.level.deal_damage(evt.caster.x, evt.caster.y, self.spell.get_stat('damage'), Tags.Arcane, self.spell)
+			if not self.spell.get_stat('length'):
+				return
 			for letter in evt.caster.name:
 				self.owner.level.deal_damage(evt.caster.x, evt.caster.y, 5, Tags.Dark, self.spell)
 				
@@ -6530,6 +6532,8 @@ class TrueNameEffect(Buff):
 			self.owner.remove_buff(self)
 		if evt.unit.name == self.target:
 			self.owner.level.deal_damage(evt.unit.x, evt.unit.y, self.spell.get_stat('damage'), Tags.Arcane, self.spell)
+			if not self.spell.get_stat('length'):
+				return
 			for letter in evt.unit.name:
 				self.owner.level.deal_damage(evt.unit.x, evt.unit.y, 5, Tags.Dark, self.spell)
 
@@ -6725,8 +6729,13 @@ class JekylBuff(Stun):
 	def __init__(self, spell):
 		Stun.__init__(self)
 		self.spell = spell
+		for tag in damage_tags:
+			if tag != Tags.Arcane or tag != Tags.Holy:
+				self.resists[tag] = 50
 		if self.spell.get_stat('regen'):
-			self.resists[Tags.Poison] = 100
+			self.resists[Tags.Poison] = 50
+			self.resists[Tags.Arcane] = 50
+			self.resists[Tags.Holy] = 50
 		if self.spell.get_stat('rage'):
 			self.owner_triggers[EventOnSpellCast] = self.on_cast
 			self.owner_triggers[EventOnDamaged] = self.on_dmg
@@ -6754,7 +6763,8 @@ class JekylBuff(Stun):
 				tiles.append(p)
 			if tiles != []:
 				tile = random.choice(tiles)
-				self.owner.level.act_move(self.owner, tile.x, tile.y, teleport=False)
+				if self.owner.level.can_move(self.owner, tile.x, tile.y, teleport=False):
+					self.owner.level.act_move(self.owner, tile.x, tile.y, teleport=False)
 
 	def slash(self, target, dist):
 		if dist >= 1.5:
@@ -6770,7 +6780,8 @@ class JekylBuff(Stun):
 		spell.caster = self.owner
 		spell.owner = self.owner
 		spell.name = "Raging Claws"
-		spell.tags = [Tags.Enchantment, Tags.Chaos, Tags.Nature, Tags.Translocation]
+		spell.tags = self.spell.tags
+		spell.level = 1
 		self.owner.level.act_cast(self.owner, spell, target.x, target.y, pay_costs=False, queue=True)
 		yield
 
@@ -6782,12 +6793,10 @@ class JekylBuff(Stun):
 
 class JekylAsset(Buff):
 	def on_init(self):
+		self.name = "Transformed"
 		self.stack_type = STACK_TYPE_TRANSFORM
 		self.buff_type = BUFF_TYPE_CURSE
 		self.transform_asset = ["TcrsCustomModpack", "Units", "player_jekyl"]
-		self.resists[Tags.Physical] = 75
-		self.resists[Tags.Fire] = 75
-		self.resists[Tags.Lightning] = 75
 
 class JekylPotion(Spell):
 	def on_init(self):
@@ -6805,7 +6814,7 @@ class JekylPotion(Spell):
 		self.damage_type = Tags.Physical
 
 		self.upgrades['rage'] = (1, 3, "Ulfsaar Drink", "Each turn, each spell you cast, and each time you take damage during the buff, grants you a stack of bloodrage. Each stack lasts [4:duration] turns.", [Tags.Blood])
-		self.upgrades['regen'] = (1, 2, "Razzil Brew", "The regeneration effect is 5 times as strong, and become immune to [poison] during the effect.")
+		self.upgrades['regen'] = (1, 4, "Razzil Brew", "The regeneration effect is 5 times as strong, and gain an additional 50 [poison], [holy], and [arcane] resistance during the effect.")
 		self.upgrades['drain'] = (1, 2, "N'aix Tonic", "The melee attacks become [dark], and drain life.", [Tags.Dark])
 
 	def get_extra_examine_tooltips(self):
@@ -6814,7 +6823,8 @@ class JekylPotion(Spell):
 	def get_description(self):
 		return ("Each turn, attack an adjacent enemy [{num_targets}:num_targets] times, or if there are no adjacent units leap to an enemy within [{radius}_tiles:radius] tiles.\n"
 				"Deals [{damage}_physical:physical] per hit. Lasts [{duration}_turns:duration]\n"
-				"You are stunned during the effect, regenerate [{damage}_HP:heal] per turn, and gain 75% resistance to [Physical], [Fire], and [Lightning] damage.\n").format(**self.fmt_dict())
+				"You are stunned during the effect, regenerate [{damage}_HP:heal] per turn, and gain 50% resistance to all damage types except [holy] and [arcane].\n"
+				"The melee attack and leaps are level 1 spells with this spell's tags.").format(**self.fmt_dict())
 
 	def cast_instant(self, x, y):
 		self.caster.apply_buff(JekylBuff(self), self.get_stat('duration'))
@@ -6844,12 +6854,14 @@ def Riftstalker():
 	unit = Unit()
 	unit.name = "Riftstalker"
 	unit.asset = ["TcrsCustomModpack", "Units", "riftstalker"]
-	unit.max_hp = 33
-	unit.shields = 3
+	unit.max_hp = 25
+	unit.shields = 4
 
-	unit.spells.append(LeapAttack(damage=9, range=3))
+	leap = LeapAttack(damage=9, range=3, is_leap=True, damage_type=Tags.Arcane)
+	leap.requires_los = False
+	unit.spells.append(leap)
 	unit.buffs.append(TeleportyBuff())
-	unit.tags = [Tags.Arcane, Tags.Chaos]
+	unit.tags = [Tags.Arcane, Tags.Chaos, Tags.Translocation]
 	unit.resists[Tags.Arcane] = 100
 	unit.resists[Tags.Holy] = -50
 	unit.resists[Tags.Physical] = -50
@@ -6860,21 +6872,21 @@ class SummonRiftstalker(Spell):
 	def on_init(self):
 		self.name = "Summon Riftstalker"
 		self.tags = [Tags.Arcane, Tags.Conjuration, Tags.Chaos]
-		self.level = 7
+		self.level = 4
 		self.asset = ["TcrsCustomModpack", "Icons", "riftstalker_icon"]
 
-		self.max_charges = 1
+		self.max_charges = 2
 		self.range = 5
-		self.shields = 3
-		self.minion_health = 33
+		self.shields = 4
+		self.minion_health = 25
 		self.minion_damage = 9
-		self.minion_range = 3
+		self.minion_range = 4
 
 		self.must_target_empty = True
 
 		self.upgrades['warp'] = (1, 6, "Warpstalker", "The leaping attack gains bonus range equal to the greatest range among your [translocation] spells, and bonus damage equal to the SP you have spent on [translocation] magic.", [Tags.Translocation])
 		self.upgrades['mind'] = (1, 1, "Mindwracker", "Instead of choosing the greatest amount for each attribute, it gains 33% of the value from all other [conjuration] spells with that attribute.")
-		self.upgrades['rift'] = (1, 3, "Rift Siphon", "If you target a rift with the spell, the summoned riftstalker gains 3 shields, 4 damage, and 2 range on its leap attack.")
+		self.upgrades['rift'] = (1, 2, "Rift Siphon", "If you target a rift with the spell, the summoned riftstalker gains 4 shields, 9 damage, and 4 range on its leap attack.")
 
 	def get_description(self):
 		return ("Summons a riftstalker at target tile.\nIts base hp is [{minion_health}_HP:minion_health], and "
@@ -6917,7 +6929,8 @@ class SummonRiftstalker(Spell):
 			pass
 		elif type(t.prop) == Portal: ##TODO self.get_stat
 			unit.shields += 3
-			unit.spells[0].range += 3
+			unit.spells[0].damage += 4
+			unit.spells[0].range += 2
 		self.summon(unit, target=Point(x, y))
 
 
