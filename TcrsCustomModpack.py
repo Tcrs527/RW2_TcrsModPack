@@ -14,9 +14,8 @@ print(time.asctime())
 cust_spells.construct_spells()
 cust_skills.construct_skills()
 
-
+## Modifications to make_floor so that walls or chasms becoming floors can be events
 Level.EventOnMakeFloor = namedtuple("EventOnMakeFloor", "x y was_chasm was_wall")
-
 def make_floor_event(self, x, y, calc_glyph=True):
 		tile = self.tiles[x][y]
 		was_chasm = False
@@ -48,9 +47,9 @@ def make_floor_event(self, x, y, calc_glyph=True):
 
 Level.make_floor = make_floor_event
 
-
+## Modifications to add_obj_event so that clouds entering can be events
 Level.EventOnMakeCloud = namedtuple("EventOnCloudEnter", "x y cloud")
-
+Level.EventOnMakeProp = namedtuple("EventOnPropEnter", "x y prop")
 def add_obj_event(self, obj, x, y):
 	obj.x = x
 	obj.y = y
@@ -122,8 +121,60 @@ def add_obj_event(self, obj, x, y):
 
 	elif isinstance(obj, Prop):
 		self.add_prop(obj, x, y)
-
+		self.event_manager.raise_event(Level.EventOnMakeProp(x, y , obj))
 	else:
 		assert(False) # Unknown obj type
 
 Level.add_obj = add_obj_event
+
+
+## Modifications to Advance to activate quick_move using the mostly ignored moves_left attribute
+
+def advance_new(self, orders=None):
+	can_act = True
+	for b in self.buffs:
+		if not b.on_attempt_advance():
+			can_act = False
+			if self.is_player_controlled:
+				stun_duration = 1 if not isinstance(self.last_action, StunnedAction) else self.last_action.duration + 1
+				self.last_action = StunnedAction(b, stun_duration)
+				self.level.requested_action = None
+				self.level.combat_log.debug("[Wizard:wizard] is %s" % b.name)
+
+	if can_act:
+		# Take an action
+		if not self.is_player_controlled:
+			action = self.get_ai_action()
+		else:
+			action = self.level.requested_action
+			self.level.requested_action = None
+			self.last_action = action
+				
+		logging.debug("%s will %s" % (self, action))
+		assert(action is not None)
+
+		if isinstance(action, MoveAction):
+			if self.is_player_controlled:
+				self.level.combat_log.debug("[Wizard:wizard] takes a step")
+			self.level.act_move(self, action.x, action.y)
+			if self.moves_left > 0:
+				self.moves_left -= 1
+				return False
+		elif isinstance(action, CastAction):
+			self.level.act_cast(self, action.spell, action.x, action.y)
+			if action.spell.get_stat('quick_cast') and not self.quick_cast_used:
+				self.quick_cast_used = True
+				return False
+		elif isinstance(action, PassAction):
+			if self.is_player_controlled:
+				self.level.combat_log.debug("[Wizard:wizard] stands still")
+			self.level.event_manager.raise_event(EventOnPass(self), self)
+
+
+	self.try_dismiss_ally()
+
+	# TODO- post turn effects
+	# TODO- return False if a non turn consuming action was taken
+	return True
+	
+Unit.advance = advance_new

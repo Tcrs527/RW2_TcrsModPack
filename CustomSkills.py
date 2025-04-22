@@ -1,3 +1,4 @@
+from msvcrt import kbhit
 import sys
 
 sys.path.append('../..')
@@ -707,6 +708,7 @@ class NightsightBuff(Buff):
 		self.color = Tags.Eye.color
 		self.name = "Nightsight"
 		self.dtypes = [Tags.Eye, Tags.Dark]
+		self.count = self.skill.get_stat('shot_cooldown')
 
 	def make_knight(self):
 		self.knight = EyeKnight()
@@ -725,10 +727,13 @@ class NightsightBuff(Buff):
 		if self.knight == None or self.knight.is_alive() == False:
 			self.make_knight()
 		else:
-			self.knight.max_hp += 8
-			self.knight.cur_hp += 8
-			melee = [s for s in self.knight.spells if s.name == "Melee Attack"][0]
-			melee.damage += 2
+			self.count -= 1
+			if self.count <= 0:
+				self.count = self.skill.get_stat('shot_cooldown')
+				self.knight.max_hp += self.skill.get_stat('minion_health') // 4
+				self.knight.cur_hp += self.skill.get_stat('minion_health') // 4
+				melee = [s for s in self.knight.spells if s.name == "Melee Attack"][0]
+				melee.damage += self.skill.get_stat('minion_damage') // 4
 
 class NightsightLantern(Upgrade):
 	def on_init(self):
@@ -737,16 +742,18 @@ class NightsightLantern(Upgrade):
 		self.asset = ["TcrsCustomModpack", "Icons", "nightsight_lantern"]
 		self.level = 5
 
-		self.minion_health = 30
-		self.minion_damage = 10
+		self.minion_health = 60
+		self.minion_damage = 16
+		self.shot_cooldown = 3
 
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.global_triggers[EventOnDeath] = self.on_death
 
 	def get_description(self):
 		return ("Whenever you cast a [dark] or [eye] spell, gain Nightsight with duration equal to the spell's level. Eye spells give 4 times their level. \n"
-				"While you have the buff summon an Eye Knight until you no longer have the buff. When you cast an Eye enchantment, the Eye Knight also casts it.\n"
-			    "Each turn the Eye Knight gains 8 bonus HP, and 2 melee damage.\n").format(**self.fmt_dict())
+				"While you have Nightsight summon an eyeknight.\nEyeknights have [{minion_health}_max_hp:minion_health] and a [{minion_damage}_dark:dark] damage melee attack.\n"
+				"When you cast an Eye enchantment, the eyeknight also casts it.\n"
+			    "Each [3:duration] turns, decreasing with shot cooldown, the eyeknight gains 25% its base max hp and melee damage.\n").format(**self.fmt_dict())
 	
 	def get_extra_examine_tooltips(self):
 		return [EyeKnight()]
@@ -1580,6 +1587,9 @@ class AuraReading(Upgrade):
 		self.global_triggers[EventOnBuffRemove] = self.buff_removed
 		self.global_triggers[EventOnDeath] = self.on_death
 		
+		self.global_bonuses['aura_damage'] = 2
+
+		self.aura_damage = 2
 		self.minion_health = 55
 		self.minion_damage = 12
 		self.duration = 20
@@ -1592,7 +1602,7 @@ class AuraReading(Upgrade):
 		return [CorruptElephant()]
 
 	def copy_aura(self, aura):
-		buff = DamageAuraBuff(damage=2, radius=aura.radius, damage_type=[Tags.Physical], friendly_fire=False)
+		buff = DamageAuraBuff(damage=aura.damage, radius=aura.radius, damage_type=[Tags.Physical], friendly_fire=False)
 		buff.stack_type = STACK_REPLACE
 		buff.color = Tags.Physical.color
 		buff.name = "Physical Aura"
@@ -2631,19 +2641,24 @@ class SpeakerForDead(Upgrade):
 		self.level = 6
 		self.tags = [Tags.Dark, Tags.Word]
 		self.asset = ["TcrsCustomModpack", "Icons", "speaker_for_dead"] ##Slightly modified skeleton and bone wizard
-		self.description = ("For every 15 undead units that die, cast one of your word spells randomly. If you have no word spells cast word of undeath." +
-							"\nThis skill has 1 charge(s) which refresh each realm, and scales with bonuses to max charges.")
-
-		self.global_triggers[EventOnDeath] = self.on_death
-		self.owner_triggers[EventOnUnitAdded] = self.on_enter
 		self.cur_charges = 1
 		self.count = 15
+		self.global_triggers[EventOnDeath] = self.on_death
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
 		
+		self.description = ("For every 15 [undead] units that die, cast one of your [word] spells for free. If you don't know any [word] spells, cast word of undeath." +
+							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + " Remaining Undead: " + str(self.count)).format(**self.fmt_dict())
+
+	def update_desc(self):
+		self.description = ("For every 15 [undead] units that die, cast one of your [word] spells for free. If you don't know any [word] spells, cast word of undeath." +
+							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + " Remaining Undead: " + str(self.count)).format(**self.fmt_dict())
+
 	def on_enter(self, evt):
 		self.count = 15
 		word_charges = self.owner.tag_bonuses[Tags.Word]['max_charges'] * (1 + self.owner.tag_bonuses_pct[Tags.Word]['max_charges'])
 		dark_charges = self.owner.tag_bonuses[Tags.Dark]['max_charges'] * (1 + self.owner.tag_bonuses_pct[Tags.Dark]['max_charges'])
 		self.cur_charges = word_charges + dark_charges
+		self.update_desc()
 
 	def on_death(self, evt):
 		if not Tags.Undead in evt.unit.tags:
@@ -2653,6 +2668,7 @@ class SpeakerForDead(Upgrade):
 		self.count -= 1
 		if self.count > 0:
 			return
+		self.update_desc()
 		self.count = 15
 		word_spells = []
 		for s in self.owner.spells:
@@ -2661,13 +2677,13 @@ class SpeakerForDead(Upgrade):
 		if self.cur_charges < 1:
 			return
 		self.cur_charges -= 1
+		self.update_desc()
 		if word_spells == []:
 			word = self.owner.get_or_make_spell(WordOfUndeath)
 		else:
 			random.shuffle(word_spells)
 			word = self.owner.get_or_make_spell(type(word_spells[0]))
 		self.owner.level.act_cast(self.owner, word, self.owner.x, self.owner.y, pay_costs=False)
-
 
 class NarrowSouled(Upgrade):
 	def on_init(self):
@@ -2927,6 +2943,221 @@ class DazzlingMovement(Upgrade):
 		self.charges = 0
 		self.moved = False
 
+class Basics(Upgrade):
+	def on_init(self):
+		self.name = "Practice the Basics"
+		self.level = 4
+		self.tags = [Tags.Sorcery]
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		self.global_triggers[EventOnLevelComplete] = self.on_complete
+		self.description = "This skill gains 1 [Sorcery] damage permanently for each realm completed. It loses 1 bonus damage if you cast any level 2 or higher spell."
+		self.asset = ["TcrsCustomModpack", "Icons", "dazzling_movement"] ##TODO Asset
+		self.spell_level = 1
+		self.tag_bonuses[Tags.Sorcery]['damage'] = 1
+		
+	def on_cast(self, evt):
+		print(evt.spell.level)
+		if evt.spell.level > self.spell_level:
+			self.spell_level = evt.spell.level
+			if self.tag_bonuses[Tags.Sorcery]['damage'] > 0:
+				self.tag_bonuses[Tags.Sorcery]['damage'] -= 1
+				self.owner.tag_bonuses[Tags.Sorcery]['damage'] -= 1
+
+	def on_complete(self, evt):
+		if self.spell_level > 1:
+			self.spell_level = 1
+			return
+		
+		self.spell_level = 1
+		self.tag_bonuses[Tags.Sorcery]['damage'] += 1
+		self.owner.tag_bonuses[Tags.Sorcery]['damage'] += 1
+
+def SilverGorgon():
+	unit = GreenGorgon()
+	breath = ShrapnelBreath()
+	breath.damage = 8
+	unit.spells = [breath]
+	unit.tags = [Tags.Holy, Tags.Metallic, Tags.Living]
+	return unit
+
+class SilverGorgonFamiliar(Upgrade):
+	def on_init(self):
+		self.level = 5
+		self.tags = [Tags.Holy, Tags.Metallic, Tags.Conjuration]
+		self.name = "Silver Gorgon"
+		
+		self.unit = None
+		self.counter_max = 5
+		self.counter = self.counter_max
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter_level
+		self.global_triggers[EventOnDeath] = self.on_death
+
+		self.minion_health = 66
+		self.minion_damage = 8
+
+	def get_description(self):
+		return ("After 5 units die from [physical] or [holy] damage, summon a silver gorgon familiar if you do not currently have one.\n"
+				"The familiar has [{minion_health}_health:minion_health] and a [physical] breath attack which deals [{minion_damage}_damage:minion_damage].\n"
+				"It can cast your: Metal Shard, Mercurize, Ironize, Heavenly Blast, Scourge, and Holy Armor spells on a 3 turn cooldown.\n").format(**self.fmt_dict())
+
+	def on_enter_level(self, evt):
+		self.counter = self.counter_max
+
+	def on_death(self, evt):
+		if evt.damage_event == None:
+			return
+		if not (evt.damage_event.damage_type == Tags.Holy or evt.damage_event.damage_type == Tags.Physical):
+			return
+		if not self.has_unit():
+			self.counter -= 1
+			if self.counter <= 0:
+				self.summon_gorgon()
+				self.counter = self.counter_max
+
+	def summon_gorgon(self):
+		self.unit = self.make_gorgon()
+		apply_minion_bonuses(self, self.unit)
+		self.summon(self.unit)
+
+	def has_unit(self):
+		return self.unit and self.unit.is_alive() and self.unit.level == self.owner.level ##Interesting check in the original skill
+
+
+	def make_gorgon(self):
+		monster = SilverGorgon()
+
+		allowed_spells = [
+			MetalShard,
+			MercurizeSpell,
+			ProtectMinions,
+			HolyBlast,
+			ScourgeSpell,
+			HolyShieldSpell
+		]
+
+
+		for spell in reversed(self.owner.spells):
+			if type(spell) in allowed_spells:
+				temp_spell = type(spell)()
+				temp_spell.statholder = self.owner
+				temp_spell.max_charges = 0
+				temp_spell.cur_charges = 0
+				temp_spell.cool_down = 3
+				temp_spell.description = "\n"
+				monster.spells.insert(0, temp_spell)
+
+		return monster
+
+class StolenTime(Buff):
+	def on_init(self):
+		self.name = "Stolen Time"
+		self.color = Tags.Arcane.color
+		self.buff_type = BUFF_TYPE_BLESS
+		self.tag_bonuses[Tags.Arcane]['quick_cast'] = 1
+		self.tag_bonuses[Tags.Lightning]['quick_cast'] = 1
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+			
+	def on_pre_advance(self):
+		if self.owner.moves_left == 0:
+			self.owner.moves_left += 1
+
+	def on_cast(self,evt):
+		if Tags.Arcane in evt.spell.tags or Tags.Lightning in evt.spell.tags:
+			self.owner.level.queue_spell(self.clear_buffs())
+			
+	def clear_buffs(self):
+		self.owner.remove_buff(self)
+		yield
+
+class ThiefOfTime(Upgrade):
+	def on_init(self):
+		self.level = 6
+		self.tags = [Tags.Arcane, Tags.Lightning]
+		self.name = "Thief of Time"
+		self.description = ("Each turn, steal 1 turn from all unit's buffs, and 1 turn from all units which are temporary.\n"
+							"Every 10 turns that are stolen, gain Stolen Time for 5 turns, granting you 1 free tile moved per turn and quickcast to your next [arcane] or [lightning] spell."
+							"Removed on casting an [arcane] or [lightning] spell.")
+		self.stolen_turns = 0
+
+	def on_advance(self):
+		units = self.owner.level.units
+		temp_units = [u for u in units if u.turns_to_death != None]
+		for u in temp_units:
+			if u.turns_to_death <= 1:
+				continue
+			u.turns_to_death -= 1
+			self.stolen_turns += 1
+			if u.turns_to_death == 0:
+				u.kill()
+				
+		buff_units = [u for u in units if u.buffs != []]
+		for u in buff_units:
+			for b in u.buffs:
+				if b.buff_type == BUFF_TYPE_BLESS or b.buff_type == BUFF_TYPE_CURSE:
+					if b.turns_left > 1:
+						self.stolen_turns += 1
+						b.turns_left -= 1
+						
+		if self.stolen_turns >= 10:
+			self.stolen_turns -= 10
+			self.owner.apply_buff(StolenTime(), 5)
+
+
+class DirectionalOrders(Buff):
+	def __init__(self, skill, point, direction):
+		self.skill = skill
+		self.point = point
+		self.direction = direction
+		Buff.__init__(self)
+		
+	def on_init(self):
+		self.name = "Move! " + self.direction
+		self.color = Tags.Translocation.color
+		self.buff_type = BUFF_TYPE_BLESS
+		self.stack_type = STACK_REPLACE
+		self.show_effect = False
+		self.owner_triggers[EventOnMoved] = self.on_move
+		self.count = 0
+			
+	def on_move(self, evt):
+		if self.direction == "Left" and self.point.x > self.owner.x:
+			self.skill.count +=1
+		elif self.direction == "Right" and self.point.x < self.owner.x:
+			self.skill.count +=1
+		elif self.direction == "Up" and self.point.y > self.owner.y:
+			self.skill.count +=1
+		elif self.direction == "Down" and self.point.y < self.owner.y:
+			self.skill.count +=1
+		else:
+			self.skill.count = 0
+
+
+class StratagemPriority(Upgrade):
+	def on_init(self):
+		self.name = "Confusing Strategy"
+		self.level = 0
+		self.tags = [Tags.Translocation, Tags.Chaos]
+		self.damage = 1
+		self.count = 0
+
+	def get_description(self):
+		return ("Before your turn gain Confusing Strategy, which indicates a direction.\nWhen your turn ends if you have moved towards that direction, gain a charge.\n"
+				"Every 5 charges, deal {damage} [Fire], [Lightning], or [Physical] damage to all enemies, and apply Berserk for 2."
+				"\nCharges: %d" % self.count).format(**self.fmt_dict())
+
+	def on_pre_advance(self):
+		if self.count >= 4:
+			self.count = 0
+			eligible_units = [u for u in self.owner.level.units if are_hostile(u, self.owner)]
+			if eligible_units:
+				for u in eligible_units:
+					tag = random.choice([Tags.Fire, Tags.Lightning, Tags.Physical])
+					u.deal_damage(self.get_stat('damage'), tag, self)
+					u.apply_buff(BerserkBuff(), 2)
+					
+		direction = random.choice(["Left", "Right", "Up", "Down"])
+		self.owner.apply_buff(DirectionalOrders(self, Point(self.owner.x, self.owner.y), direction), 1)
+
 ## ------------------------------------------ TODO Implementation Zone -------------------------------------------------------
 
 
@@ -2936,8 +3167,11 @@ def construct_skills():
 				WeaverOfOccultism, WeaverOfMaterialism, Mathemagics, QueenOfTorment, Cloudcover, WalkTheOrb, EyeSpellTrigger, Overheal, RimeorbLantern,
 				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord,
 				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler,
-				SixthSense, SpeakerForDead, NarrowSouled, FireBreathing, VowOfPoverty, RenounceDarkness, DazzlingMovement]
+				SixthSense, SpeakerForDead, NarrowSouled, FireBreathing, VowOfPoverty, RenounceDarkness, DazzlingMovement, Basics, SilverGorgonFamiliar,
+				ThiefOfTime, StratagemPriority]
+	
 	## AngularGeometry OneWithNothing
 	print("Added " + str(len(skillcon)) + " skills")
 	for s in skillcon:
 		Upgrades.skill_constructors.extend([s])
+
