@@ -2394,7 +2394,7 @@ class Agoraphobia(Upgrade):  ##Possible crash from this. Hard to tell what happe
 		self.damage = 15
 
 	def get_description(self):
-		return ("If you have 6 or more walls surrounding you, deal [{damage}_damage:damage] to one random enemy for each eye buff you have."
+		return ("Each turn, if you have 6 or more walls surrounding you, deal [{damage}_damage:damage] to one random enemy for each eye buff you have."
 				"\nThe damage type is the same as your eye buff, and Eye of Rage deals poison damage.").format(**self.fmt_dict())
 
 	def on_advance(self): ##TODO Probably can implement this as a queued spell for readability.
@@ -2950,13 +2950,12 @@ class Basics(Upgrade):
 		self.tags = [Tags.Sorcery]
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.global_triggers[EventOnLevelComplete] = self.on_complete
-		self.description = "This skill gains 1 [Sorcery] damage permanently for each realm completed. It loses 1 bonus damage if you cast any level 2 or higher spell."
+		self.description = "This skill gains 1 [Sorcery] damage permanently for each realm completed. It loses 1 bonus damage if you cast any level 3 or higher spell."
 		self.asset = ["TcrsCustomModpack", "Icons", "dazzling_movement"] ##TODO Asset
-		self.spell_level = 1
+		self.spell_level = 2
 		self.tag_bonuses[Tags.Sorcery]['damage'] = 1
 		
 	def on_cast(self, evt):
-		print(evt.spell.level)
 		if evt.spell.level > self.spell_level:
 			self.spell_level = evt.spell.level
 			if self.tag_bonuses[Tags.Sorcery]['damage'] > 0:
@@ -2964,11 +2963,11 @@ class Basics(Upgrade):
 				self.owner.tag_bonuses[Tags.Sorcery]['damage'] -= 1
 
 	def on_complete(self, evt):
-		if self.spell_level > 1:
-			self.spell_level = 1
+		if self.spell_level > 2:
+			self.spell_level = 2
 			return
 		
-		self.spell_level = 1
+		self.spell_level = 2
 		self.tag_bonuses[Tags.Sorcery]['damage'] += 1
 		self.owner.tag_bonuses[Tags.Sorcery]['damage'] += 1
 
@@ -3056,10 +3055,17 @@ class StolenTime(Buff):
 		self.tag_bonuses[Tags.Arcane]['quick_cast'] = 1
 		self.tag_bonuses[Tags.Lightning]['quick_cast'] = 1
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		self.owner_triggers[EventOnMoved] = self.on_move
 			
+	def on_move(self, evt): ##Solely to look cool
+		self.owner.level.show_effect(self.owner.x, self.owner.y, Tags.Translocation, minor=True)
+
 	def on_pre_advance(self):
 		if self.owner.moves_left == 0:
-			self.owner.moves_left += 1
+			self.owner.moves_left = 1
+			
+	def on_advance(self):
+		self.owner.moves_left = 0
 
 	def on_cast(self,evt):
 		if Tags.Arcane in evt.spell.tags or Tags.Lightning in evt.spell.tags:
@@ -3072,7 +3078,7 @@ class StolenTime(Buff):
 class ThiefOfTime(Upgrade):
 	def on_init(self):
 		self.level = 6
-		self.tags = [Tags.Arcane, Tags.Lightning]
+		self.tags = [Tags.Arcane, Tags.Lightning, Tags.Translocation]
 		self.name = "Thief of Time"
 		self.description = ("Each turn, steal 1 turn from all unit's buffs, and 1 turn from all units which are temporary.\n"
 							"Every 10 turns that are stolen, gain Stolen Time for 5 turns, granting you 1 free tile moved per turn and quickcast to your next [arcane] or [lightning] spell."
@@ -3158,6 +3164,91 @@ class StratagemPriority(Upgrade):
 		direction = random.choice(["Left", "Right", "Up", "Down"])
 		self.owner.apply_buff(DirectionalOrders(self, Point(self.owner.x, self.owner.y), direction), 1)
 
+def ShieldKnight():
+	unit = Unit()
+	unit.name = "Shield Knight"
+	unit.asset = ["TcrsCustomModpack", "Units", "shield_knight"]
+
+	unit.max_hp = 80
+	unit.shields = 8
+	
+	unit.tags = [Tags.Arcane, Tags.Metallic, Tags.Living]
+	unit.resists[Tags.Physical] = 75
+	unit.resists[Tags.Arcane] = 75
+	unit.resists[Tags.Fire] = 50
+	unit.resists[Tags.Lightning] = 50
+	unit.resists[Tags.Ice] = 50
+
+	def shield_on_hit(knight, target):
+		knight.shields += 1
+	melee = SimpleMeleeAttack(damage=10, damage_type=Tags.Physical, onhit=shield_on_hit)
+	melee.description  = "Gain 1 shield on hit"
+	unit.spells.append(melee)
+	unit.buffs.append(ShieldRegenBuff(shield_freq=2, shield_max=8))
+	
+	return unit
+
+
+class TowerKnight(Upgrade):
+	def on_init(self):
+		self.name = "Tower Knight"
+		self.level = 5
+		self.tags = [Tags.Arcane, Tags.Metallic, Tags.Conjuration]
+		#self.asset = ["TcrsCustomModpack", "Icons", "speaker_for_dead"]
+		self.cur_charges = 1
+		self.count = 10
+		self.global_triggers[EventOnShieldRemoved] = self.on_block
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
+		
+		self.description = ("Every 10 times you block damage with a shield, gain a charge. Each turn consume a charge to summon a tower knight." +
+							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + " Remaining Shields: " + str(self.count)).format(**self.fmt_dict())
+
+	def update_desc(self):
+		self.description = ("Every 10 times you block damage with a shield, gain a charge. Each turn consume a charge to summon a tower knight." +
+							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + " Remaining Shields: " + str(self.count)).format(**self.fmt_dict()).format(**self.fmt_dict())
+
+	def on_enter(self, evt):
+		self.count = 10
+		arcane_charges = self.owner.tag_bonuses[Tags.Arcane]['max_charges'] * (1 + self.owner.tag_bonuses_pct[Tags.Arcane]['max_charges'])
+		metal_charges = self.owner.tag_bonuses[Tags.Metallic]['max_charges'] * (1 + self.owner.tag_bonuses_pct[Tags.Metallic]['max_charges'])
+		conj_charges = self.owner.tag_bonuses[Tags.Conjuration]['max_charges'] * (1 + self.owner.tag_bonuses_pct[Tags.Conjuration]['max_charges'])
+		self.cur_charges = arcane_charges + metal_charges + conj_charges
+		self.update_desc()
+
+	def on_advance(self):
+		if self.cur_charges > 0:
+			unit = ShieldKnight()
+			apply_minion_bonuses(self, unit)
+			self.summon(unit, self.owner)
+			self.cur_charges -= 1
+			
+	def on_block(self, evt):
+		if evt.unit != self.owner:
+			return
+
+		self.count -= 1
+		if self.count <= 0:
+			self.cur_charges += 1
+			self.count = 10
+			self.update_desc()
+
+
+
+class CullTheWeak(Upgrade):
+	def on_init(self):
+		self.name = "Cull the Weak"
+		self.level = 0
+		self.tags = [Tags.Chaos]
+		self.description = "Each turn, kill all units with less hp than your ."
+
+
+class Resilience(Upgrade):
+	def on_init(self):
+		self.name = "Resilience"
+		self.level = 0
+		self.tags = [Tags.Chaos]
+		self.description = "Each turn, if you health total is lower than your total SP spent on [Holy], [Nature]."
+
 ## ------------------------------------------ TODO Implementation Zone -------------------------------------------------------
 
 
@@ -3168,7 +3259,7 @@ def construct_skills():
 				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord,
 				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler,
 				SixthSense, SpeakerForDead, NarrowSouled, FireBreathing, VowOfPoverty, RenounceDarkness, DazzlingMovement, Basics, SilverGorgonFamiliar,
-				ThiefOfTime, StratagemPriority]
+				ThiefOfTime, StratagemPriority, TowerKnight]
 	
 	## AngularGeometry OneWithNothing
 	print("Added " + str(len(skillcon)) + " skills")
