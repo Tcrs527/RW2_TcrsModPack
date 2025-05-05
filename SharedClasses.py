@@ -13,11 +13,11 @@ print("General Content Loaded")
 
 def TagConvertor():
 	tagdict = {	Tags.Living:Tags.Nature,
-	    		Tags.Slime:Tags.Nature,
 				Tags.Undead:Tags.Dark,
 				Tags.Demon:Tags.Dark,
 				Tags.Construct:Tags.Metallic,
-				Tags.Glass:Tags.Arcane}
+				Tags.Glass:Tags.Arcane,
+				Tags.Elemental:Tags.Conjuration }
 	return tagdict
 
 def TagToDmgTagConvertor():
@@ -41,20 +41,21 @@ def TagToDmgTagConvertor():
 	return tagdict
 	
 def ScrollConvertor():
-	tagdict = { Tags.Fire:[Spells.FireballSpell,LivingFireScroll_Custom()],
-				Tags.Ice:[Spells.Icicle,LivingIceScroll()],
-				Tags.Lightning:[Spells.LightningBoltSpell,LivingLightningScroll_Custom()],
-				Tags.Arcane:[Spells.MagicMissile,LivingArcaneScroll()],
-				Tags.Dark:[Spells.DeathBolt,LivingDarknessScroll()],
-				Tags.Nature:[Spells.PoisonSting,LivingNatureScroll()],
-				Tags.Holy:[Spells.HolyBlast,LivingHolyScroll()],
-				Tags.Blood:[Spells.BloodTapSpell,LivingBloodScroll()]}
+	tagdict = { Tags.Fire:[Spells.FireballSpell,LivingFireScroll_Custom],
+				Tags.Ice:[Spells.Icicle,LivingIceScroll],
+				Tags.Lightning:[Spells.LightningBoltSpell,LivingLightningScroll_Custom],
+				Tags.Arcane:[Spells.MagicMissile,LivingArcaneScroll],
+				Tags.Dark:[Spells.DeathBolt,LivingDarknessScroll],
+				Tags.Nature:[Spells.PoisonSting,LivingNatureScroll],
+				Tags.Holy:[Spells.HolyBlast,LivingHolyScroll],
+				Tags.Blood:[Spells.BloodTapSpell,LivingBloodScroll]}
 	return tagdict
 
 class LivingScrollSuicide(Buff):
 	def on_init(self):
 		self.buff_type = BUFF_TYPE_PASSIVE
 		self.name = "Fragile"
+		self.description = "Dies when it casts any spell."
 		self.color = Tags.Physical.color
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		

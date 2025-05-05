@@ -9,7 +9,6 @@ from Game import *
 from Level import *
 from Monsters import *
 from RareMonsters import BatDragon
-from copy import copy
 import math
 import copy
 
@@ -24,20 +23,19 @@ class Librarian(Upgrade):
 		self.tags = [Tags.Word, Tags.Sorcery]
 		self.asset = ["TcrsCustomModpack", "Icons", "librarian"]
 		self.level = 7
-		self.description = ("Whenever you cast a level 5 or greater spell, summon a number of living scrolls equal to the spell's level." +
+		self.description = ("Whenever you cast a level 5 or greater spell, summon a number of living scrolls equal to the spell's level. Living scrolls cast your cantrips.\n" +
 							"Word spells summon twice as many scrolls.\n" +
 							"\nCan summon: [Fire], [Ice], [Lightning], [Nature], [Arcane], [Dark], [Holy], [Metallic], [Chaos], and [Blood] scrolls, depending on the tags of spell.")
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
 		self.scrolls = ScrollConvertor()
-		self.scrolls[Tags.Metallic] = MetalShard,LivingMetalScroll()
-		self.scrolls[Tags.Chaos] = Improvise,LivingChaosScroll()
+		self.scrolls[Tags.Metallic] = [MetalShard,LivingMetalScroll]
+		self.scrolls[Tags.Chaos] = [Improvise,LivingChaosScroll]
 		self.excluded = [Tags.Sorcery, Tags.Enchantment, Tags.Conjuration, Tags.Word, Tags.Dragon]
 		
 	def make_scrolls(self,tag):
-		unit = copy.deepcopy(self.scrolls.get(tag)[1])
+		unit = self.scrolls.get(tag)[1]()
 		unit.team = self.owner.team
-		spell = copy.deepcopy(self.scrolls.get(tag)[0])
-		spell.statholder = self.owner
+		spell = self.scrolls.get(tag)[0]
 		grant_minion_spell(spell, unit, self.owner, 0)
 		self.summon(unit, radius=4, sort_dist=False)
 		yield
@@ -45,10 +43,12 @@ class Librarian(Upgrade):
 	def on_spell_cast(self, evt):
 		if evt.spell.level < 5:
 			return
-		maintags = copy.copy(evt.spell.tags)
+		maintags = list(evt.spell.tags)
 		for exclude in self.excluded:
 			if exclude in maintags:
 				maintags.remove(exclude)
+		if maintags == []:
+			return
 		mult = 1
 		if Tags.Word in evt.spell.tags:
 			mult = 2
@@ -242,44 +242,47 @@ class Crescendo(Upgrade):
 			
 	
 
-class PsionicBlast(Upgrade): ##This could be an equipment instead, it's kind of awkward as a skill.
+class PsionicBlast(Upgrade):
 	def on_init(self):
 		self.name = "Psionic Blast"
 		self.asset = ["TcrsCustomModpack", "Icons", "psionic_blast"]
 		self.tags = [Tags.Arcane]
-		self.level = 4 
-		self.range = 5
+		self.level = 4
+		self.radius = 7
 		self.counter = 0
-		self.description = "Every 3 turns while channeling any spell, cast your devour mind on a nearby viable target."
+		self.damage = 20
+		self.num_targets = 2
 
-	def can_target(self, target):
-		if not are_hostile(self.owner, target):
+	def get_description(self):
+		return ("Every 3 turns while channeling any spell, deal [{damage}_damage:arcane] to [{num_targets}_enemies:num_targets], "
+				"which are not [constructs:construct], that are within [{radius}_tiles:radius].").format(**self.fmt_dict()) ##Disabled for now. Many skills of mine already grow with time, and this one is cheap.
+
+	def get_targets(self, rad_bonus):
+		potential_targets = self.owner.level.get_units_in_ball(self.owner, self.get_stat('radius') + rad_bonus)
+		potential_targets = [t for t in potential_targets if are_hostile(self.owner, t) and Tags.Construct not in t.tags]
+		if potential_targets == []:
 			return False
-		if Tags.Living in target.tags:
-			return True
-
-		if self.md_spell.get_stat('spiriteater') and (Tags.Demon in target.tags or Tags.Arcane in target.tags):
-			return True
-
-		return False
-
-	def get_targets(self):
-		potential_targets = self.owner.level.get_units_in_ball(self.owner, self.get_stat('range'))
-		potential_targets = [t for t in potential_targets if self.can_target(t)]
-		if potential_targets != []: ##TODO Fix this stupid code - Note I can no longer tell why I thought this was stupid.
-			random.shuffle(potential_targets)
-			return potential_targets[0]
-		return False
+		else:
+			return potential_targets
 
 	def on_advance(self):
-		if self.owner.has_buff(ChannelBuff):
-			self.counter += 1
-			if self.counter >= 3:
-				self.counter = 0
-				self.md_spell = self.owner.get_or_make_spell(Spells.MindDevour)
-				unit = self.get_targets()
-				if unit != False:
-					self.owner.level.act_cast(self.owner, self.md_spell, unit.x, unit.y, pay_costs=False)
+		buff = self.owner.get_buff(ChannelBuff)
+		if not buff: ##Check for other channel buffs eventually
+			self.counter = 0
+			return
+		self.counter += 1
+		if self.counter % 3 != 0:
+			return
+		
+		rad_bonus = 0 ##Can use counter, can use some other method? Right now doesn't scale
+		units = self.get_targets(rad_bonus)
+		if units == False:
+			return
+		random.shuffle(units)
+		targets = self.get_stat('num_targets')
+		for i in units[:targets]:
+			unit = units.pop(0)
+			unit.deal_damage(self.get_stat('damage'), Tags.Arcane, self)
 
 class BatBreathChiro(BreathWeapon):
 	def on_init(self):
@@ -2085,6 +2088,27 @@ class TheHitDebuff(Buff):
 	def on_death(self, evt):
 		self.skill.global_bonuses['damage'] += 1
 		self.skill.owner.global_bonuses['damage'] += 1
+		
+class TheHitHelper(Buff):
+	def __init__(self, target):
+		self.target = target
+		Buff.__init__(self)
+		self.name = "Targeting: " + target.name
+		self.description = "Sends a path towards the target unit you need to kill every 5 turns.\nDon't worry if it gets removed."
+		self.stack_type = STACK_NONE
+		self.buff_type = BUFF_TYPE_BLESS
+		self.color = Tags.Sorcery.color
+		self.count = 4
+
+	def on_pre_advance(self):
+		self.count += 1
+		if self.count < 5:
+			return
+		self.count = 0
+		if self.target:
+			if not self.target.is_alive() or not self.target.has_buff(TheHitDebuff):
+				self.owner.remove_buff(self)
+			self.owner.level.show_path_effect(self.owner, self.target, Tags.Tongue, minor=False)
 
 class TheHitList(Upgrade):
 	def on_init(self):
@@ -2104,8 +2128,12 @@ class TheHitList(Upgrade):
 
 	def on_unit_added(self, evt):
 		units = [u for u in self.owner.level.units if are_hostile(u, self.owner)]
-		target = random.choice(units)
+		units_filter = [u for u in units if not ( u.has_buff(RespawnAs) or u.has_buff(MatureInto) or u.has_buff(ChanceToBecome) )]
+		if units_filter == []:
+			return
+		target = random.choice(units_filter)
 		target.apply_buff(TheHitDebuff(self), self.get_stat('duration'))
+		self.owner.apply_buff(TheHitHelper(target))
 
 
 class ArcticPoleBuff(Buff):
@@ -2238,12 +2266,13 @@ class OrdersBuff(Buff):
 	def on_cast(self, evt):
 		if self.tag in evt.spell.tags:
 			for i in range(self.skill.get_stat('num_summons')):
-				unit = copy.deepcopy(self.skill.tagdict[self.tag][1])
-				grant_minion_spell(copy.deepcopy(self.skill.tagdict[self.tag][0]), unit, self.owner)
+				unit = self.skill.tagdict[self.tag][1]()
+				spell = grant_minion_spell(self.skill.tagdict[self.tag][0], unit, self.owner)
+				spell.statholder = self.owner
 				unit.apply_buff(LivingScrollSuicide())
 				self.summon(unit, sort_dist=False)
 
-class Orders(Upgrade):
+class Orders(Upgrade): ##Entirely inspired by the guilty gear song Holy Orders (itself from religion)
 	def on_init(self):
 		self.name = "Orders"
 		self.tags = [Tags.Sorcery]
@@ -2255,12 +2284,14 @@ class Orders(Upgrade):
 		self.duration = 1
 		
 		self.tagdict = ScrollConvertor()
+		self.tagdict[Tags.Chaos] = [Improvise,LivingChaosScroll]
+		self.tagdict[Tags.Metallic] = [MetalShard,LivingMetalScroll] ##There are no metal word spells in my mod, but someone else might make one
 
 	def get_description(self):
-		return ("Each turn gain the Orders buff, which has a random tag. It can be: [Fire], [Lightning], [Ice], [Nature], [Arcane], [Dark], [Holy], or [Blood].\n"
+		return ("Each turn gain the Orders buff, which has a random tag. It can be: [Fire], [Lightning], [Ice], [Nature], [Arcane], [Dark], [Holy], [Metallic], [Chaos] or [Blood].\n"
 				"When you cast a spell with that tag, summon [{num_summons}:num_summons] living scrolls which cast your corresponding cantrip. The buff lasts 1 turn.").format(**self.fmt_dict())
 
-	def on_advance(self): ##Add metallic and chaos cantrips
+	def on_advance(self):
 		tag = random.choice([Tags.Fire, Tags.Lightning, Tags.Ice, Tags.Nature, Tags.Arcane, Tags.Dark, Tags.Holy, Tags.Blood])
 		buff = OrdersBuff(self, tag)
 		buff.name = tag.name + " Orders"
@@ -2294,16 +2325,26 @@ class Mechanize(Upgrade):
 class SlimeCantripEducation(Spell):
 	def on_init(self):
 		self.name = "Slime Education"
-		self.description = "Grants one slime within 8 tiles a random level 1 sorcery. Does not pick slimes which already have 2 or more spells."
+		self.description = "Grants a different slime within 8 tiles a random level 1 sorcery, as long as it does not already know a sorcery."
 		self.range = 0
 		self.cool_down = 2
 		self.radius = 8
 		
 	def get_nearby_slimes(self, x, y):
-		slimes = [u for u in self.caster.level.get_units_in_ball(Point(x, y), self.get_stat('radius')) if not are_hostile(u, self.caster) and Tags.Slime in u.tags and u != self.caster and len(u.spells) < 2]
+		slimes = [u for u in self.caster.level.get_units_in_ball(Point(x, y), self.get_stat('radius')) if not are_hostile(u, self.caster) and Tags.Slime in u.tags and u != self.caster]
 		if slimes == []:
 			return None
-		return slimes
+		uneducated = []
+		for u in slimes:
+			cantrip = False
+			for s in u.spells:
+				if Tags.Sorcery in s.tags:
+					cantrip = True
+			if cantrip == False:
+				uneducated.append(u)
+		if uneducated == []:
+			return
+		return uneducated
 
 	def can_cast(self, x, y):
 		slimes = self.get_nearby_slimes(x, y)
@@ -2330,6 +2371,7 @@ class SlimeCantripEducation(Spell):
 		spell.statholder = slime
 		spell.caster = slime
 		spell.owner = slime
+		spell.description = " "
 		
 		slime.spells.insert(0, spell)
 		yield
@@ -2338,7 +2380,7 @@ def LearnedSlime():
 	unit = Unit()
 	unit.name = "Slime Scholar"
 	unit.max_hp = 10
-	unit.tags = [Tags.Slime]
+	unit.tags = [Tags.Slime, Tags.Arcane]
 	unit.asset = ["TcrsCustomModpack", "Units", "slime_scholar"]
 
 	unit.spells.append(SlimeCantripEducation())
@@ -2351,7 +2393,7 @@ class SlimeScholar(Upgrade):
 	def on_init(self):
 		self.name = "Slime Scholar"
 		self.level = 5
-		self.tags = [Tags.Arcane, Tags.Sorcery, Tags.Conjuration, Tags.Slime]
+		self.tags = [Tags.Sorcery, Tags.Conjuration, Tags.Slime]
 		self.asset = ["TcrsCustomModpack", "Icons", "slime_scholar_icon"]
 		
 		self.global_triggers[EventOnUnitAdded] = self.on_unit_enter
@@ -2361,7 +2403,7 @@ class SlimeScholar(Upgrade):
 
 	def get_description(self):
 		return ("When allied slimes are summoned, including by splitting, gain 1 Oozing Knowledge for each max hp it has.\n"
-				"Each turn, consume up to 100 Oozing Knowledge to summon a slime scholar, which can teach a slime a random cantrip, but only if it has less than 2 spells.\n"
+				"Each turn, consume up to 100 Oozing Knowledge to summon a slime scholar.\nIt can teach a nearby slime a random cantrip, if it does not know one.\n"
 				"Oozing Knowledge: %d\n" % self.count)
 
 	def get_extra_examine_tooltips(self):
@@ -2378,9 +2420,11 @@ class SlimeScholar(Upgrade):
 	def on_unit_enter(self, evt):
 		if evt.unit == self.owner:
 			self.count = 0
-			self.threshold = 100
-		if Tags.Slime in evt.unit.tags and not are_hostile(self.owner, evt.unit):
-			self.count += evt.unit.max_hp
+			
+		if Tags.Slime not in evt.unit.tags or are_hostile(self.owner, evt.unit):
+			return
+		self.count += evt.unit.max_hp
+		print(self.count)
 
 
 
@@ -2946,12 +2990,13 @@ class DazzlingMovement(Upgrade):
 class Basics(Upgrade):
 	def on_init(self):
 		self.name = "Practice the Basics"
-		self.level = 4
+		self.level = 7
 		self.tags = [Tags.Sorcery]
+		self.asset = ["TcrsCustomModpack", "Icons", "basics"]
+
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.global_triggers[EventOnLevelComplete] = self.on_complete
 		self.description = "This skill gains 1 [Sorcery] damage permanently for each realm completed. It loses 1 bonus damage if you cast any level 3 or higher spell."
-		self.asset = ["TcrsCustomModpack", "Icons", "dazzling_movement"] ##TODO Asset
 		self.spell_level = 2
 		self.tag_bonuses[Tags.Sorcery]['damage'] = 1
 		
@@ -2973,18 +3018,22 @@ class Basics(Upgrade):
 
 def SilverGorgon():
 	unit = GreenGorgon()
+	unit.asset = ["TcrsCustomModpack", "Units", "silver_gorgon"]
 	breath = ShrapnelBreath()
+	breath.cool_down = 3
 	breath.damage = 8
-	unit.spells = [breath]
+	melee = SimpleMeleeAttack(damage=8, damage_type=Tags.Holy)
+	unit.spells = [breath, melee]
 	unit.tags = [Tags.Holy, Tags.Metallic, Tags.Living]
 	return unit
 
-class SilverGorgonFamiliar(Upgrade):
+class SilverGorgonFamiliar(Upgrade): ##Obviously modified familiar code
 	def on_init(self):
 		self.level = 5
 		self.tags = [Tags.Holy, Tags.Metallic, Tags.Conjuration]
 		self.name = "Silver Gorgon"
-		
+		self.asset = ["TcrsCustomModpack", "Icons", "silver_gorgon_icon"]
+
 		self.unit = None
 		self.counter_max = 5
 		self.counter = self.counter_max
@@ -3057,7 +3106,7 @@ class StolenTime(Buff):
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
 		self.owner_triggers[EventOnMoved] = self.on_move
 			
-	def on_move(self, evt): ##Solely to look cool
+	def on_move(self, evt): ##Solely because this looks cool
 		self.owner.level.show_effect(self.owner.x, self.owner.y, Tags.Translocation, minor=True)
 
 	def on_pre_advance(self):
@@ -3077,10 +3126,11 @@ class StolenTime(Buff):
 
 class ThiefOfTime(Upgrade):
 	def on_init(self):
-		self.level = 6
+		self.level = 5
 		self.tags = [Tags.Arcane, Tags.Lightning, Tags.Translocation]
 		self.name = "Thief of Time"
-		self.description = ("Each turn, steal 1 turn from all unit's buffs, and 1 turn from all units which are temporary.\n"
+		self.asset = ["TcrsCustomModpack", "Icons", "thief_of_time"]
+		self.description = ("Each turn, steal 1 turn from all buffs with durations, and 1 turn from all units which are temporary.\n"
 							"Every 10 turns that are stolen, gain Stolen Time for 5 turns, granting you 1 free tile moved per turn and quickcast to your next [arcane] or [lightning] spell."
 							"Removed on casting an [arcane] or [lightning] spell.")
 		self.stolen_turns = 0
@@ -3141,14 +3191,16 @@ class DirectionalOrders(Buff):
 class StratagemPriority(Upgrade):
 	def on_init(self):
 		self.name = "Confusing Strategy"
-		self.level = 0
+		self.level = 6
 		self.tags = [Tags.Translocation, Tags.Chaos]
+		self.asset = ["TcrsCustomModpack", "Icons", "stratagem_priority"]
+
 		self.damage = 1
 		self.count = 0
 
 	def get_description(self):
 		return ("Before your turn gain Confusing Strategy, which indicates a direction.\nWhen your turn ends if you have moved towards that direction, gain a charge.\n"
-				"Every 5 charges, deal {damage} [Fire], [Lightning], or [Physical] damage to all enemies, and apply Berserk for 2."
+				"Every 5 charges, deal {damage} [Fire], [Lightning], or [Physical] damage to all enemies, and apply Berserk for 2 turns."
 				"\nCharges: %d" % self.count).format(**self.fmt_dict())
 
 	def on_pre_advance(self):
@@ -3180,11 +3232,12 @@ def ShieldKnight():
 	unit.resists[Tags.Ice] = 50
 
 	def shield_on_hit(knight, target):
-		knight.shields += 1
+		if knight.shields <= 8:
+			knight.shields += 1
 	melee = SimpleMeleeAttack(damage=10, damage_type=Tags.Physical, onhit=shield_on_hit)
-	melee.description  = "Gain 1 shield on hit"
+	melee.description  = "Gain 1 shield on hit, up to 8"
 	unit.spells.append(melee)
-	unit.buffs.append(ShieldRegenBuff(shield_freq=2, shield_max=8))
+	unit.buffs.append(ShieldRegenBuff(shield_freq=3, shield_max=8))
 	
 	return unit
 
@@ -3194,18 +3247,18 @@ class TowerKnight(Upgrade):
 		self.name = "Tower Knight"
 		self.level = 5
 		self.tags = [Tags.Arcane, Tags.Metallic, Tags.Conjuration]
-		#self.asset = ["TcrsCustomModpack", "Icons", "speaker_for_dead"]
+		self.asset = ["TcrsCustomModpack", "Icons", "shield_knight_icon"]
 		self.cur_charges = 1
 		self.count = 10
 		self.global_triggers[EventOnShieldRemoved] = self.on_block
 		self.owner_triggers[EventOnUnitAdded] = self.on_enter
 		
 		self.description = ("Every 10 times you block damage with a shield, gain a charge. Each turn consume a charge to summon a tower knight." +
-							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + " Remaining Shields: " + str(self.count)).format(**self.fmt_dict())
+							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + "\nRemaining Shields: " + str(self.count)).format(**self.fmt_dict())
 
 	def update_desc(self):
 		self.description = ("Every 10 times you block damage with a shield, gain a charge. Each turn consume a charge to summon a tower knight." +
-							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + " Remaining Shields: " + str(self.count)).format(**self.fmt_dict()).format(**self.fmt_dict())
+							"\nThis skill's charges refresh when you enter a new realm.\nCharges: " + str(self.cur_charges) + "\nRemaining Shields: " + str(self.count)).format(**self.fmt_dict()).format(**self.fmt_dict())
 
 	def on_enter(self, evt):
 		self.count = 10
@@ -3234,20 +3287,54 @@ class TowerKnight(Upgrade):
 
 
 
-class CullTheWeak(Upgrade):
+class ArmageddonEye(Upgrade):
 	def on_init(self):
-		self.name = "Cull the Weak"
-		self.level = 0
-		self.tags = [Tags.Chaos]
-		self.description = "Each turn, kill all units with less hp than your ."
+		self.name = "Eye of Armageddon"
+		self.level = 5
+		self.tags = [Tags.Eye, Tags.Chaos, Tags.Metallic]
+		self.asset = ["TcrsCustomModpack", "Icons", "eye_of_armageddon"]
+		
+		self.description = "Every [8:shot_cooldown] turns, kill all unshielded enemies in line of sight, if they have less current hp than your total SP spent on [Chaos], [Eye], and [Metallic] magic."
+		self.owner_triggers[EventOnUnitAdded] = self.on_enter
+		self.count = 0
+		self.shot_cooldown = 8
+		#self.stats.append('shot_cooldown')
+
+	def cull_the_weak(self, mastery):
+		units = [u for u in self.owner.level.units if u.shields == 0 and u.cur_hp < mastery]
+		los_units = [u for u in units if self.owner.level.can_see(u.x, u.y, self.owner.x, self.owner.y)]
+		for u in los_units:
+			u.kill()
+			self.owner.level.show_effect(u.x, u.y, Tags.Chaos)
+
+	def on_enter(self, evt):
+		self.count = 0
+
+	def on_advance(self):
+		mastery = self.owner.get_mastery(Tags.Chaos) + self.owner.get_mastery(Tags.Metallic) + self.owner.get_mastery(Tags.Eye)
+		self.description = ("When you enter a realm, and every [8:shot_cooldown] turns, kill all unshielded enemies in line of sight, if they have less current hp than your total SP spent on [Chaos], [Eye], and [Metallic] magic."+
+							"\nTotal SP: " + str(mastery))
+		self.count += 1
+		if self.count < self.get_stat('shot_cooldown'):
+			return
+		self.count = 0
+		self.cull_the_weak(mastery=mastery)
+
+class IceWyrmSong(Upgrade):
+	def on_init(self):
+		self.name = "Song of Ice Wyrms"
+		self.level = 5
+		self.tags = [Tags.Dragon, Tags.Word, Tags.Ice]
+		self.asset = ["TcrsCustomModpack", "Icons", "ice_drake_song"]
+		self.description = "At the start of your turn, if you health total is lower than your total SP spent on [Dragon], [Word] and [Ice] magic, regenerate 10 hp."
 
 
-class Resilience(Upgrade):
-	def on_init(self):
-		self.name = "Resilience"
-		self.level = 0
-		self.tags = [Tags.Chaos]
-		self.description = "Each turn, if you health total is lower than your total SP spent on [Holy], [Nature]."
+	def on_pre_advance(self):
+		mastery = self.owner.get_mastery(Tags.Dragon) + self.owner.get_mastery(Tags.Word) + self.owner.get_mastery(Tags.Ice)
+		self.description = ("At the start of your turn, if you health total is lower than your total SP spent on [Dragon], [Word] and [Ice] magic, regenerate 10 hp."
+							"\nTotal SP: " + str(mastery))
+		if self.owner.cur_hp < mastery:
+			self.owner.deal_damage(-10, Tags.Heal, self)
 
 ## ------------------------------------------ TODO Implementation Zone -------------------------------------------------------
 
@@ -3259,7 +3346,7 @@ def construct_skills():
 				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord,
 				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler,
 				SixthSense, SpeakerForDead, NarrowSouled, FireBreathing, VowOfPoverty, RenounceDarkness, DazzlingMovement, Basics, SilverGorgonFamiliar,
-				ThiefOfTime, StratagemPriority, TowerKnight]
+				ThiefOfTime, StratagemPriority, TowerKnight, ArmageddonEye, IceWyrmSong]
 	
 	## AngularGeometry OneWithNothing
 	print("Added " + str(len(skillcon)) + " skills")
