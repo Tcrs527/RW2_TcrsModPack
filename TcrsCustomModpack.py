@@ -50,87 +50,90 @@ Level.make_floor = make_floor_event
 ## Modifications to add_obj_event so that clouds entering can be events
 Level.EventOnMakeCloud = namedtuple("EventOnCloudEnter", "x y cloud")
 Level.EventOnMakeProp = namedtuple("EventOnPropEnter", "x y prop")
+
 def add_obj_event(self, obj, x, y):
-	obj.x = x
-	obj.y = y
-	obj.level = self
+		obj.x = x
+		obj.y = y
+		obj.level = self
 
-	if not hasattr(obj, 'level_id'):
-		obj.level_id = self.level_id
+		if not hasattr(obj, 'level_id'):
+			obj.level_id = self.level_id
 
-	if isinstance(obj, Unit):
-		self.event_manager.raise_event(EventOnUnitPreAdded(obj), obj)
+		if isinstance(obj, Unit):
+			self.event_manager.raise_event(EventOnUnitPreAdded(obj), obj)
 
-		if obj.max_hp <= 1:
-			obj.max_hp = 1
+			if obj.max_hp <= 1:
+				obj.max_hp = 1
 
-		if not obj.cur_hp:
-			obj.cur_hp = obj.max_hp
-			assert(obj.cur_hp > 0)
+			if not obj.cur_hp:
+				obj.cur_hp = obj.max_hp
+				assert(obj.cur_hp > 0)
 				
 			
-		for i in range(-obj.radius, obj.radius+1):
-			for j in range(-obj.radius, obj.radius+1):
-				cur_x = x + i
-				cur_y = y + j
+			for i in range(-obj.radius, obj.radius+1):
+				for j in range(-obj.radius, obj.radius+1):
+					cur_x = x + i
+					cur_y = y + j
 
-				if not self.tiles[cur_x][cur_y].unit is None:
-					print("Cannot add %s at %s, already has %s" % (obj.name, str((x, y)), self.tiles[cur_x][cur_y].unit.name))
-					assert(self.tiles[cur_x][cur_y].unit is None)
+					if not self.tiles[cur_x][cur_y].unit is None:
+						print("Cannot add %s at %s, already has %s" % (obj.name, str((x, y)), self.tiles[cur_x][cur_y].unit.name))
+						assert(self.tiles[cur_x][cur_y].unit is None)
 
-				self.tiles[cur_x][cur_y].unit = obj
+					self.tiles[cur_x][cur_y].unit = obj
 
-		# Hack- allow improper adding in monsters.py
-		for spell in obj.spells:
-			spell.caster = obj
-			spell.owner = obj
+			# Hack- allow improper adding in monsters.py
+			for spell in obj.spells:
+				spell.caster = obj
+				spell.owner = obj
 
-		self.set_default_resistances(obj)
+			self.set_default_resistances(obj)
 
-		for buff in list(obj.buffs):
-			# Apply unapplied buffs- these can come from Content on new units
-			could_apply = buff.apply(obj) != ABORT_BUFF_APPLY
+			for buff in list(obj.buffs):
+				# Apply unapplied buffs- these can come from Content on new units
+				could_apply = buff.apply(obj) != ABORT_BUFF_APPLY
 
-			# Remove buffs which cannot be applied (happens with stun + clarity potentially)
-			if not could_apply:
-				obj.buffs.remove(obj)
+				# Remove buffs which cannot be applied (happens with stun + clarity potentially)
+				if not could_apply:
+					obj.buffs.remove(obj)
 
-			# Monster buffs are all passives
-			if not obj.is_player_controlled:
-				buff.buff_type = BUFF_TYPE_PASSIVE
+				# Monster buffs are all passives
+				if not obj.is_player_controlled:
+					buff.buff_type = BUFF_TYPE_PASSIVE
 
-		self.units.append(obj)
-		self.event_manager.raise_event(EventOnUnitAdded(obj), obj)
+			self.units.append(obj)
+			self.event_manager.raise_event(EventOnUnitAdded(obj), obj)
 
-		obj.ever_spawned = True
+			obj.ever_spawned = True
 
-	elif isinstance(obj, Cloud):
+		elif isinstance(obj, Cloud):
 
-		# kill any existing clouds
-		cur_cloud = self.tiles[x][y].cloud 
-		if cur_cloud is not None:
+			# kill any existing clouds
+			cur_cloud = self.tiles[x][y].cloud 
+			if cur_cloud is not None:
 
-			if cur_cloud.can_be_replaced_by(obj):
-				cur_cloud.kill()
-			else:
-				return
+				if cur_cloud.can_be_replaced_by(obj):
+					cur_cloud.kill()
+				else:
+					return
 
-		self.tiles[x][y].cloud = obj
-		self.clouds.append(obj)
-		self.event_manager.raise_event(Level.EventOnMakeCloud(x, y , obj))
+			self.tiles[x][y].cloud = obj
+			self.clouds.append(obj)
+			self.event_manager.raise_event(Level.EventOnMakeCloud(x, y , obj))
 
-	elif isinstance(obj, Prop):
-		self.add_prop(obj, x, y)
-		self.event_manager.raise_event(Level.EventOnMakeProp(x, y , obj))
-	else:
-		assert(False) # Unknown obj type
+		elif isinstance(obj, Prop):
+			self.add_prop(obj, x, y)
+			self.event_manager.raise_event(Level.EventOnMakeProp(x, y , obj))
+
+		else:
+			assert(False) # Unknown obj type
 
 Level.add_obj = add_obj_event
-
+		
 
 ## Modifications to Advance to activate quick_move using the mostly ignored moves_left attribute
 
 def advance_new(self, orders=None):
+	
 	can_act = True
 	for b in self.buffs:
 		if not b.on_attempt_advance():
@@ -149,14 +152,17 @@ def advance_new(self, orders=None):
 			action = self.level.requested_action
 			self.level.requested_action = None
 			self.last_action = action
-				
-		logging.debug("%s will %s" % (self, action))
-		assert(action is not None)
+
+		if action:
+			logging.debug("%s will %s" % (self, action))
 
 		if isinstance(action, MoveAction):
 			if self.is_player_controlled:
 				self.level.combat_log.debug("[Wizard:wizard] takes a step")
 			self.level.act_move(self, action.x, action.y)
+			if self.quick_move and not self.quick_cast_used:
+				self.quick_cast_used = True
+				return False
 			if self.moves_left > 0:
 				self.moves_left -= 1
 				return False
@@ -170,11 +176,17 @@ def advance_new(self, orders=None):
 				self.level.combat_log.debug("[Wizard:wizard] stands still")
 			self.level.event_manager.raise_event(EventOnPass(self), self)
 
-
 	self.try_dismiss_ally()
 
-	# TODO- post turn effects
-	# TODO- return False if a non turn consuming action was taken
 	return True
 	
 Unit.advance = advance_new
+
+# import inspect #In case I have to launch and aura damage isn't in the tooltip yet.
+# def get_RiftWizard():
+# 	for f in inspect.stack()[::-1]:
+# 		if "file 'RiftWizard2.py'" in str(f):
+# 			return inspect.getmodule(f[0])
+# 	return inspect.getmodule(f[0])
+# RiftWizard = get_RiftWizard()
+# RiftWizard.tooltip_colors['aura_damage'] = Tags.Enchantment.color

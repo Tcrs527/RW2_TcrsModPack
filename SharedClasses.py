@@ -1,5 +1,6 @@
 from threading import main_thread
 import Spells
+import BossSpawns
 import copy
 from Level import *
 from Monsters import *
@@ -49,6 +50,20 @@ def ScrollConvertor():
 				Tags.Nature:[Spells.PoisonSting,LivingNatureScroll],
 				Tags.Holy:[Spells.HolyBlast,LivingHolyScroll],
 				Tags.Blood:[Spells.BloodTapSpell,LivingBloodScroll]}
+	return tagdict
+
+def ModConvertor():
+	tagdict = {	Tags.Fire:BossSpawns.Flametouched,
+				Tags.Ice:BossSpawns.Icy,
+				Tags.Arcane:BossSpawns.Faetouched,
+				Tags.Lightning:BossSpawns.Stormtouched,
+				Tags.Chaos:BossSpawns.Chaostouched,
+				Tags.Metallic:BossSpawns.Metallic,
+				Tags.Undead:BossSpawns.Ghostly,
+				Tags.Dark:BossSpawns.Lich,
+				Tags.Nature:BossSpawns.Claytouched,
+				Tags.Living:BossSpawns.Trollblooded,
+				Tags.Holy:BossSpawns.Immortal}
 	return tagdict
 
 class LivingScrollSuicide(Buff):
@@ -165,6 +180,11 @@ def LivingBloodScroll():
 	unit.tags.append(Tags.Blood)
 	
 	return unit
+
+def get_skill_charges(unit, tag):
+	base_charges = unit.tag_bonuses[tag]['max_charges']
+	multiplier = 1 + (unit.tag_bonuses_pct[tag]['max_charges'] / 100)
+	return base_charges * multiplier
 
 ##--------------------Tiles--------------------
 
