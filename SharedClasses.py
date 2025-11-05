@@ -181,6 +181,86 @@ def LivingBloodScroll():
 	
 	return unit
 
+
+
+class SlimeCantripEducation(Spell):
+	def on_init(self):
+		self.name = "Slime Education"
+		self.description = "Grants a different slime within 8 tiles a random level 1 sorcery, as long as it does not already know a sorcery."
+		self.range = 0
+		self.cool_down = 2
+		self.radius = 8
+		self.cantrips = None
+		
+	def get_nearby_slimes(self, x, y):
+		slimes = [u for u in self.caster.level.get_units_in_ball(Point(x, y), self.get_stat('radius')) if not are_hostile(u, self.caster) and Tags.Slime in u.tags and u != self.caster]
+		if slimes == []:
+			return None
+		uneducated = []
+		for u in slimes:
+			cantrip = False
+			for s in u.spells:
+				if Tags.Sorcery in s.tags:
+					cantrip = True
+			if cantrip == False:
+				uneducated.append(u)
+		if uneducated == []:
+			return
+		return uneducated
+
+	def can_cast(self, x, y):
+		slimes = self.get_nearby_slimes(x, y)
+		if slimes == None:
+			return False
+		else:
+			return Spell.can_cast(self, x, y)
+
+	def get_ai_target(self):
+		slimes = self.get_nearby_slimes(self.owner.x, self.owner.y)
+		if slimes == None:
+			return None
+		else:
+			return self.caster
+
+	def cast(self, x, y):
+		slimes = self.get_nearby_slimes(x, y)
+		if not slimes:
+			return
+		slime = random.choice(slimes)
+		self.caster.level.show_effect(slime.x, slime.y, Tags.Arcane)
+		
+		if self.cantrips == None: ##Calculate this per spell once, shouldn't be changing mid realm, even during amnesiac or whatever
+			spells = [s for s in Spells.all_player_spell_constructors]
+			cantrips = []
+			for c in spells:
+				if c().level == 1 and Tags.Sorcery in c().tags:
+					cantrips.append(c)
+			self.cantrips = cantrips
+
+		spell = random.choice(self.cantrips)()
+		spell.statholder = slime
+		spell.caster = slime
+		spell.owner = slime
+		spell.description = " "
+		
+		slime.spells.insert(0, spell)
+		yield
+
+def LearnedSlime():
+	unit = Unit()
+	unit.name = "Slime Scholar"
+	unit.max_hp = 10
+	unit.tags = [Tags.Slime, Tags.Arcane]
+	unit.asset = ["TcrsCustomModpack", "Units", "slime_scholar"]
+
+	unit.spells.append(SlimeCantripEducation())
+	unit.buffs.append(SlimeBuff(spawner=LearnedSlime))
+
+	unit.resists[Tags.Poison] = 100
+	return unit
+
+
+
 def get_skill_charges(unit, tag):
 	base_charges = unit.tag_bonuses[tag]['max_charges']
 	multiplier = 1 + (unit.tag_bonuses_pct[tag]['max_charges'] / 100)

@@ -13,7 +13,7 @@ import math
 import copy
 
 from mods.TcrsCustomModpack.SharedClasses import *
-from mods.TcrsCustomModpack.CustomSpells import MetalShard, Improvise, OpalescentEyeBuff, SeaSerpent, SeaWyrmBreath, SummonEyedra, ShrapnelBreath, SteelFangs, SummonBookwyrm, ScrollBreath, AvatarOfTiamat, TiamatBreath
+from mods.TcrsCustomModpack.CustomSpells import MetalShard, Improvise, AstraVirtue, OpalescentEyeBuff, SeaSerpent, SeaWyrmBreath, SummonEyedra, ShrapnelBreath, SteelFangs, SummonBookwyrm, ScrollBreath, AvatarOfTiamat, TiamatBreath
 
 print("Custom Skills Loaded")
 
@@ -552,7 +552,7 @@ class PoisonousCopy(Upgrade):
 		self.copies = 0
 
 	def get_description(self):
-		return ("Whenever you cast a [fire] spell targeting a [poisoned] unit, make a copy of that spell targeting one random enemy.\n"
+		return ("Whenever you cast a [fire] spell targeting a [poisoned] unit, make a copy of that spell targeting one random enemy, or yourself if the spell is self-cast.\n"
 				"Remove [poisoned] from the target. Activates at most 10 times per turn.").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
@@ -567,12 +567,14 @@ class PoisonousCopy(Upgrade):
 		if self.copies > 10: ##If you get in a loop of casting fire spells on poisoned fire immune enemies, break if you reach this point 10 times.
 			return
 		
-		#print(self.copies)
-		copy_targets = [u for u in self.owner.level.units if are_hostile(self.owner, u) and u != unit]
-		target = random.choice(copy_targets)
+		if evt.spell.range == 0:
+			target = self.owner
+		else:
+			copy_targets = [u for u in self.owner.level.units if are_hostile(self.owner, u) and u != unit]
+			target = random.choice(copy_targets)
 		self.copies += 1
 
-		unit.remove_buff(Poison)
+		unit.remove_buffs(Poison)
 		if evt.spell.can_copy(target.x, target.y):
 			self.owner.level.act_cast(self.owner, evt.spell, target.x, target.y, pay_costs=False)
 
@@ -986,12 +988,40 @@ class WeaverOfOccultism(Upgrade):
 		return [GhostVoid(), DeathGhost(), HolyGhost(), Bloodghast()]
 
 
+class MaterialSlimeBuff(SlimeBuff):
+	def __init__(self, growth_chance=.5):
+		Buff.__init__(self)
+		self.description = ("50%% chance to heal for 10%% of original max HP each turn.\n"
+							"Excess healing from this effect raises max HP.\n")
+
+		self.name = "Slime Growth"
+		self.color = Tags.Slime.color
+		self.growth_chance = growth_chance
+
+	def on_applied(self, owner):
+		self.start_hp = owner.max_hp
+		self.to_split = self.start_hp * 2
+		self.growth = self.start_hp // 10
+		self.description = ("50%% chance to heal for %d HP each turn.\n"
+							"Excess healing from this effect raises max HP.") % (self.growth)
+
+	def on_advance(self):
+		if random.random() >= self.growth_chance:
+			return
+
+		owner = self.owner
+		growth = self.growth
+		cur = owner.cur_hp
+		if (cur + growth) >= self.owner.max_hp:
+			owner.max_hp = cur + growth
+		owner.heal(growth, self)
+
 def MaterialSlime():
 	unit = Unit()
-	unit.name = "Materiel Slime"
+	unit.name = "Weave-Slime"
 	unit.asset = ["TcrsCustomModpack", "Units", "matslime_n"]
-	unit.description = "A slime of non-descript features"
-	unit.max_hp = 20
+	unit.description = "A slime woven from magic"
+	unit.max_hp = 15
 	unit.spells.append(SimpleMeleeAttack(5))
 	unit.tags = [Tags.Slime]
 	unit.resists[Tags.Poison] = 100
@@ -1000,96 +1030,79 @@ def MaterialSlime():
 class WeaverOfMaterialism(Upgrade):
 	def on_init(self):
 		self.name = "Weave the Material"
-		self.tags = [Tags.Nature, Tags.Dragon, Tags.Metallic, Tags.Slime]
+		self.tags = [Tags.Dragon, Tags.Metallic, Tags.Slime]
 		self.asset = ["TcrsCustomModpack", "Icons", "weaver_of_material"]
-		self.description = ("For every 3 [nature], [dragon], and [metallic] spells you cast, summon a slime at the third spell's target tile.\n" +
-							"If the [nature] tag was in any spell, the slime gains max hp and spawns additional green slimes.\n"
-							"If the [dragon] tag was in any spell, it gains a breath attack.\n"
-							"If the [metallic] tag was in any spell, it gains metallic resistances and melee retaliation damage.\n" ##TODO implement slime
-							"Does not work with free spells.").format(**self.fmt_dict())
-		self.level = 7 ##Change this to every 3 spells cast
+		self.level = 7
 		self.owner_triggers[EventOnSpellCast] = self.on_cast
-		self.points = []
+		self.casts = 3
 		self.spell_tags = []
 		
 		self.minion_health = 15
-		self.minion_damage = 5
-		self.minion_duration = 25
-	
-	def on_cast(self, evt):
-		if evt.spell.pay_costs == False:
-			return
-		if not (Tags.Nature or Tags.Dragon or Tags.Metallic in evt.spell.tags):
-			return
-		p = Point(evt.x, evt.y)
-		self.points.append(p)
-		for tag in evt.spell.tags:
-			if tag not in self.spell_tags and tag in self.tags:
-				self.spell_tags.append(tag)
-		if len(self.points) >= 3:
-			if self.spell_tags == []:
-				return
-			unit = self.get_slime(self.spell_tags)
-			apply_minion_bonuses(self, unit)
-			self.owner.level.summon(self.owner, unit, self.points[-1])
-			self.spell_tags = []
-			self.points = []
+		self.minion_damage = 4
+		self.minion_duration = 42
+
+	def get_description(self):
+		return ("For every 3 [slime], [dragon], and [metallic] spells you cast, summon a slime at the third spell's target tile for [{minion_duration}_turns:minion_duration]. Multiple tags multiply its base stats.\n" +
+				"If the [slime] tag was in any spell, the slime randomly gains max hp.\n"
+				"If the [dragon] tag was in any spell, the slime gains a breath attack.\n"
+				"If the [metallic] tag was in any spell, the slime gains metallic resistances and melee retaliation damage.\n"
+				"Does not work with free spells.").format(**self.fmt_dict())
+
+	def get_extra_examine_tooltips(self):
+		slime = MaterialSlime()
+		slime.name = "Weave-Slime Whelp Spiker"
+		slime.asset = ["TcrsCustomModpack", "Units", "matslime_n"]
+		return [slime]
 
 	def get_slime(self, tags):
 		spell_tags = tags
 		unit = MaterialSlime()
-
-		nature = False
-		if Tags.Nature in spell_tags:
-			nature = True
-		dragon = False
+		unit.name = "Weave-Slime"
+		suffix = "_"
+		
+		if Tags.Slime in spell_tags:
+			unit.buffs.append(MaterialSlimeBuff(0.5))
+			suffix += "n"
 		if Tags.Dragon in spell_tags:
-			dragon = True
-		metal = False
-		if Tags.Metallic in spell_tags:
-			metal = True
-			
-		if nature:
-			unit.tags.append(Tags.Nature)
-			unit.buffs.append(SlimeBuff(spawner=GreenSlime))
-			unit.asset = ["TcrsCustomModpack", "Units", "matslime_n"]
-			unit.name = "Slimeshroom"
-		if dragon:
 			unit.tags.append(Tags.Dragon)
-			unit.flying = True
-			unit.asset = ["TcrsCustomModpack", "Units", "matslime_r"]
-			unit.name = "Slimedrake"
+			unit.name  += " Whelp"
 			poison_breath = FireBreath()
 			poison_breath.damage_type = Tags.Poison
 			poison_breath.name = "Poison Breath"
 			unit.spells.append(poison_breath)
-		if metal:
+			suffix += "r"
+		if Tags.Metallic in spell_tags:
 			unit.tags.append(Tags.Metallic)
 			unit.buffs.append(Thorns(6, Tags.Physical))
-			unit.asset = ["TcrsCustomModpack", "Units", "matslime_m"]
-			unit.name = "Slimespike"
+			unit.name += " Spiker"
+			suffix += "m"
 
-		if nature and dragon:
-			if metal:
-				unit.asset = ["TcrsCustomModpack", "Units", "matslime_nrm"]
-				unit.anme = "Spikeshroom Slimedrake"
-			else:
-				unit.asset = ["TcrsCustomModpack", "Units", "matslime_nr"]
-				unit.name = "Slimeshroom Drake"
-		elif nature and metal:
-			unit.asset = ["TcrsCustomModpack", "Units", "matslime_nm"]
-			unit.name = "Slimespike Shroom"
-		elif dragon and metal:
-			unit.asset = ["TcrsCustomModpack", "Units", "matslime_rm"]
-			unit.name = "Slimespike Drake"
-
+		unit.asset = ["TcrsCustomModpack", "Units", "matslime" + suffix]
+		unit.max_hp *= len(tags)
+		for s in unit.spells:
+			s.damage *= len(tags)
 		return unit
 
-	def get_extra_examine_tooltips(self):
-		slime = MaterialSlime()
-		slime.name = "Spikeshroom Slimedrake"
-		slime.asset = ["TcrsCustomModpack", "Units", "matslime_nrm"]
-		return [slime]
+	def make_slime(self, unit, point):
+		self.owner.level.summon(self.owner, unit, point)
+		yield
+
+	def on_cast(self, evt):
+		if evt.spell.pay_costs == False:
+			return
+		if not ( (Tags.Slime in evt.spell.tags) or (Tags.Dragon in evt.spell.tags) or (Tags.Metallic in evt.spell.tags)):
+			return
+		p = Point(evt.x, evt.y)
+		for tag in evt.spell.tags:
+			if tag not in self.spell_tags and tag in self.tags:
+				self.spell_tags.append(tag)
+		self.casts -= 1
+		if self.casts == 0:
+			self.casts = 3
+			unit = self.get_slime(self.spell_tags)
+			apply_minion_bonuses(self, unit)
+			self.owner.level.queue_spell(self.make_slime(unit, p))
+			self.spell_tags = []
 
 
 class Scrapheap(Upgrade):
@@ -1097,7 +1110,7 @@ class Scrapheap(Upgrade):
 		self.name = "Scrapheap"
 		self.tags = [Tags.Metallic, Tags.Conjuration]
 		self.asset =  ["TcrsCustomModpack", "Icons", "scrapheap"]
-		self.description = "Each 10 turns summon a scrap golem. For each construct or metallic unit that died during those 10 turns, it gains either 7 health, or 3 damage."
+		self.description = "Each 10 turns summon a scrap golem. For each [construct] or [metallic] unit that died during those 10 turns, it gains either 7 health, or 3 damage."
 		self.level = 4 ##Directly comparable to boneguard.
 		self.global_triggers[EventOnDeath] = self.on_death
 		self.scrap = 0
@@ -2293,73 +2306,6 @@ class Mechanize(Upgrade):
 			BossSpawns.apply_modifier(BossSpawns.Metallic, unit)
 
 
-class SlimeCantripEducation(Spell):
-	def on_init(self):
-		self.name = "Slime Education"
-		self.description = "Grants a different slime within 8 tiles a random level 1 sorcery, as long as it does not already know a sorcery."
-		self.range = 0
-		self.cool_down = 2
-		self.radius = 8
-		
-	def get_nearby_slimes(self, x, y):
-		slimes = [u for u in self.caster.level.get_units_in_ball(Point(x, y), self.get_stat('radius')) if not are_hostile(u, self.caster) and Tags.Slime in u.tags and u != self.caster]
-		if slimes == []:
-			return None
-		uneducated = []
-		for u in slimes:
-			cantrip = False
-			for s in u.spells:
-				if Tags.Sorcery in s.tags:
-					cantrip = True
-			if cantrip == False:
-				uneducated.append(u)
-		if uneducated == []:
-			return
-		return uneducated
-
-	def can_cast(self, x, y):
-		slimes = self.get_nearby_slimes(x, y)
-		if slimes == None:
-			return False
-		else:
-			return Spell.can_cast(self, x, y)
-
-	def get_ai_target(self):
-		slimes = self.get_nearby_slimes(self.owner.x, self.owner.y)
-		if slimes == None:
-			return None
-		else:
-			return self.caster
-
-	def cast(self, x, y):
-		slimes = self.get_nearby_slimes(x, y)
-		if not slimes:
-			return
-		slime = random.choice(slimes)
-		
-		cantrips = [Spells.FireballSpell, Spells.Icicle, Spells.LightningBoltSpell, Spells.PoisonSting, Spells.MagicMissile, Spells.DeathBolt, MetalShard, Improvise]
-		spell = random.choice(cantrips)()
-		spell.statholder = slime
-		spell.caster = slime
-		spell.owner = slime
-		spell.description = " "
-		
-		slime.spells.insert(0, spell)
-		yield
-
-def LearnedSlime():
-	unit = Unit()
-	unit.name = "Slime Scholar"
-	unit.max_hp = 10
-	unit.tags = [Tags.Slime, Tags.Arcane]
-	unit.asset = ["TcrsCustomModpack", "Units", "slime_scholar"]
-
-	unit.spells.append(SlimeCantripEducation())
-	unit.buffs.append(SlimeBuff(spawner=LearnedSlime))
-
-	unit.resists[Tags.Poison] = 100
-	return unit
-
 class SlimeScholar(Upgrade):
 	def on_init(self):
 		self.name = "Slime Scholar"
@@ -2988,6 +2934,7 @@ class Basics(Upgrade):
 		self.tag_bonuses[Tags.Sorcery]['damage'] += 1
 		self.owner.tag_bonuses[Tags.Sorcery]['damage'] += 1
 
+
 def SilverGorgon():
 	unit = GreenGorgon()
 	unit.asset = ["TcrsCustomModpack", "Units", "silver_gorgon"]
@@ -3018,7 +2965,7 @@ class SilverGorgonFamiliar(Upgrade): ##Obviously modified familiar code
 	def get_description(self):
 		return ("After 5 units die from [physical] or [holy] damage, summon a silver gorgon familiar, if you do not currently have one.\n"
 				"The familiar has [{minion_health}_health:minion_health] and a [physical] breath attack which deals [{minion_damage}_damage:minion_damage].\n"
-				"It can cast your: Metal Shard, Mercurize, Ironize, Heavenly Blast, Scourge, and Holy Armor spells on a 3 turn cooldown.\n").format(**self.fmt_dict()) ##TODO add cantrip eventually
+				"It can cast your: Metal Shard, Sacred Strike, Mercurize, Ironize, Heavenly Blast, Scourge, and Holy Armor spells on a 3 turn cooldown.\n").format(**self.fmt_dict()) ##TODO add cantrip eventually
 
 	def on_enter_level(self, evt):
 		self.counter = self.counter_max
@@ -3045,9 +2992,10 @@ class SilverGorgonFamiliar(Upgrade): ##Obviously modified familiar code
 
 	def make_gorgon(self):
 		monster = SilverGorgon()
-
+		
 		allowed_spells = [
 			MetalShard,
+			AstraVirtue,
 			MercurizeSpell,
 			ProtectMinions,
 			HolyBlast,
@@ -3410,6 +3358,8 @@ class ChaosOrbBuff(Buff):
 	def on_cast(self, evt):
 		if not evt.caster.is_player_controlled:
 			return
+		if self.point == Point(evt.x, evt.y):
+			return
 		tags = [Tags.Orb, Tags.Translocation, Tags.Chaos]
 		if any(tag in tags for tag in evt.spell.tags):
 			self.point = Point(evt.x, evt.y)
@@ -3434,8 +3384,8 @@ class ChaosOrbBuff(Buff):
 		if self.point == None:
 			return
 		line = self.owner.level.get_points_in_line(start=Point(self.owner.x, self.owner.y), end=self.point, find_clear=False)
-		if len(line) == 2:
-			target = line[1]
+		if len(line) == 1:
+			target = line[0]
 		else:
 			soft_blink = [p for p in self.owner.level.get_points_in_ball(line[1].x, line[1].y, 1.5) if self.owner.level.can_move(self.owner, p.x, p.y, teleport=True) and p != Point(self.owner.x, self.owner.y)]
 			if not soft_blink:
@@ -3516,7 +3466,7 @@ class Recursphere(Upgrade):
 							"You have %d charges"% self.charges).format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
-		return [self.make_orb(), FireDrake(), IceDrake(), StormDrake, VoidDrake(), GoldDrake()]
+		return [self.make_orb(), FireDrake(), IceDrake(), StormDrake(), VoidDrake(), GoldDrake()]
 
 	def enter_realm(self, evt):
 		self.charges = 10
@@ -3609,7 +3559,7 @@ class ReanimationOrb(Upgrade):
 
 	def get_description(self):
 		return ("Begin each realm with the reanimation orb, an orb immune to all damage types.\n"
-				"On any realm if you take fatal damage, you instead replace orb, taking its position and setting your max and current hp are set to the total SP spent on [lightning], [orb], and [blood] magic.\n"
+				"On any realm if you take fatal damage, you instead replace the orb, taking its position and setting your max and current hp are set to the total SP spent on [lightning], [orb], and [blood] magic.\n"
 				"The orb is stationary and has 1 hp.").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
@@ -3716,14 +3666,252 @@ class Quillgaze(Upgrade):
 		self.owner.level.queue_spell(self.thorn_spell(unit.x, unit.y))
 
 
+
+class TeleportationSickness(Buff):
+	def __init__(self, skill):
+		Buff.__init__(self)
+		self.skill = skill
+		self.name = "Teleportitis"
+		self.stack_type = STACK_INTENSITY
+		self.buff_type = BUFF_TYPE_CURSE
+		self.color = Tags.Translocation.color
+		self.asset = ['status', 'sealed_fate']
+
+	def on_advance(self):
+		if self.turns_left == 1:
+			mastery = self.skill.owner.get_mastery(Tags.Nature) + self.skill.owner.get_mastery(Tags.Arcane) + self.skill.owner.get_mastery(Tags.Translocation)
+			self.owner.deal_damage(mastery, Tags.Arcane, self.skill)
+
+
+class Teleportitis(Upgrade):
+	def on_init(self):
+		self.name = "Teleportitis"
+		self.level = 4
+		self.tags = [Tags.Nature, Tags.Arcane, Tags.Translocation]
+		self.asset = ["TcrsCustomModpack", "Icons", "teleportitis_icon"]
+		self.global_triggers[EventOnMoved] = self.on_tele
+		self.global_triggers[EventOnSpellCast] = self.on_cast
+		self.count = 0
+		self.damage = 10
+
+	def get_description(self):
+		return ("When any unit is targeted by any [nature] spell, including you, they are teleported to a random tile.\n"
+				"When an enemy is teleported by any source, it gains Teleportation Sickness for 7 turns. This effect can stack.\n"
+				"After 7 turns, Teleportation Sickness deals [arcane] damage to the unit equal to the total SP spent on [nature], [arcane], and [translocation] magic to the unit.").format(**self.fmt_dict())
+
+	def on_cast(self, evt):
+		if Tags.Nature not in evt.spell.tags:
+			return
+		unit = self.owner.level.get_unit_at(evt.x, evt.y)
+		if unit == None:
+			return
+		##Modified Disperse code
+		self.owner.level.show_effect(evt.x, evt.y, Tags.Translocation)
+		possible_points = []
+		for i in range(len(self.owner.level.tiles)):
+			for j in range(len(self.owner.level.tiles[i])):
+				if self.owner.level.can_stand(i, j, unit):
+					possible_points.append(Point(i, j))
+
+		if not possible_points:
+			return
+
+		target_point = random.choice(possible_points)
+		self.owner.level.act_move(unit, target_point.x, target_point.y, teleport=True)
+		self.owner.level.show_effect(unit.x, unit.y, Tags.Translocation)
+
+	def on_tele(self, evt):
+		if not evt.teleport:
+			return
+		if are_hostile(evt.unit, self.owner):
+			evt.unit.apply_buff(TeleportationSickness(self), 7)
+		
+
+class SilkBreath(BreathWeapon):
+	def __init__(self, skill=None):
+		BreathWeapon.__init__(self)
+		self.name = "Web Spew"
+		if skill:
+			self.skill = skill
+		self.damage = 2
+		self.duration = 12
+		self.damage_type = Tags.Poison
+		self.cool_down = 14
+		self.range = 8
+		self.angle = math.pi / 5.0
+
+	def get_description(self):
+		return "Produces webs which last for 12 turns."
+
+	def per_square_effect(self, x, y):
+		cloud = SpiderWeb()
+		cloud.owner = self.owner
+		self.caster.level.add_obj(cloud, x, y)
+		self.caster.level.deal_damage(x, y, self.damage, Tags.Poison, self)
+
+
+def SpiderDragon(skill=None):
+	unit = Unit()
+	unit.name = "Silkwyrm"
+	unit.asset = ["TcrsCustomModpack", "Units", "wyrm_spider"] ##Modified aelf spider sprite plus wyrm. Very derivative
+	unit.max_hp = 75
+
+	def StunDmgBonus(owner, target):
+		if not target:
+			return
+		if target.has_buff(Stun):
+			target.deal_damage(44, Tags.Poison, melee)
+	melee = SimpleMeleeAttack(16, onhit=StunDmgBonus)
+	melee.description = "Deals 44 bonus [poison] damage to stunned targets."
+	unit.spells.append(melee)
+	breath = SilkBreath(skill)
+	unit.spells.append(breath)
+	websling = PullAttack(damage=2,damage_type=Tags.Physical,range=8,pull_squares=4,color=Tags.Tongue.color)
+	unit.spells.append(websling)
+
+	unit.tags = [Tags.Spider, Tags.Dragon, Tags.Living]
+	unit.resists[Tags.Poison] = 100
+	unit.resists[Tags.Fire] = -100
+	return unit
+
+class DragonWeb(SpiderWeb):
+	def __init__(self, skill, point):
+		SpiderWeb.__init__(self)
+		self.name = "Dragon's Web"
+		self.point = point
+		self.skill = skill
+		self.asset = ['TcrsCustomModpack', 'Tiles', 'dragon_web_1']
+		
+	def on_expire(self):
+		unit = SpiderDragon(self.skill)
+		apply_minion_bonuses(self.skill, unit)
+		self.level.summon(unit=unit, target=self.point, owner=self.skill.owner)
+
+class Silkwyrm(Upgrade):
+	def on_init(self):
+		self.name = "Silkwyrm"
+		self.level = 5
+		self.tags = [Tags.Nature, Tags.Dragon]
+		self.asset = ["TcrsCustomModpack", "Icons", "silkwyrm_icon"]
+		self.global_triggers[Level.EventOnMakeCloud] = self.make_cloud
+		self.owner_triggers[EventOnUnitAdded] = self.enter
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		
+		self.minion_health = 75
+		self.minion_damage = 16
+		self.minion_range = 8
+		self.num_summons = 5
+		self.count = 5
+
+	def get_description(self):
+		return ("When you cast a [dragon] spell, place webs in a line between you and the target.\n"
+				"The first [{num_summons}:num_summons] webs in the realm are replaced with dragon webs, which summons a silkwyrm when removed.").format(**self.fmt_dict())
+
+	def get_extra_examine_tooltips(self):
+		return [SpiderDragon()]
+
+	def enter(self, evt):
+		self.count = self.get_stat('num_summons')
+
+	def on_cast(self, evt):
+		if Tags.Dragon not in evt.spell.tags:
+			return
+		line = self.owner.level.get_points_in_line(start=Point(self.owner.x, self.owner.y), end=Point(evt.x, evt.y), find_clear=False)
+		for p in line[1:-1]:
+			if self.owner.level.tiles[p.x][p.y].cloud:
+				continue
+			web = SpiderWeb()
+			web.owner = self.owner
+			web.source = self
+			self.owner.level.add_obj(web, p.x, p.y)
+
+	def make_cloud(self, evt):
+		if self.count <= 0:
+			return
+		if not type(evt.cloud) == SpiderWeb:
+			return
+		if evt.cloud.name == "Dragon's Web":
+			return
+		self.count -= 1
+
+		web = DragonWeb(self, Point(evt.x, evt.y))
+		web.owner = self.owner
+		web.source = self
+		evt.cloud.kill()
+		self.owner.level.add_obj(web, evt.x, evt.y)
+
+
+
+class VariegatedScales(Buff):
+	def __init__(self, skill):
+		Buff.__init__(self)
+		self.skill = skill
+		self.hp_bonus = self.skill.get_stat('minion_health')
+		self.damage = self.skill.get_stat('minion_damage')
+
+	def on_init(self):
+		self.name = "Variegation"
+		self.stack_type = STACK_REPLACE
+		self.buff_type = BUFF_TYPE_BLESS
+		self.color = Tags.Conjuration.color
+
+	def on_applied(self, owner):
+		owner.cur_hp *= (self.hp_bonus / 100) + 1
+		owner.max_hp *= (self.hp_bonus / 100) + 1
+		for spell in self.owner.spells:
+			if not hasattr(spell, 'damage'):
+				continue
+			spell.damage += self.damage
+
+class Variegation(Upgrade):
+	def on_init(self):
+		self.name = "Variegated Minions"
+		self.level = 4
+		self.asset = ["TcrsCustomModpack", "Icons", "variegated_scales_icon"]
+		self.tags = [Tags.Conjuration]
+		self.minion_health = 40
+		self.minion_damage = 10
+		self.global_triggers[EventOnUnitAdded] = self.on_enter
+		self.global_triggers[EventOnLevelComplete] = self.complete
+		self.tag_comboes = []
+		
+	def get_description(self):
+		return ("In each realm, when any allied minion spawns it gains Variegation, but only if no other minion with the exact same set of tags has spawned.\n"
+				"Variegation grants [{minion_health}%_max_life:minion_health], and [{minion_damage}_damage:minion_damage] damage to spells.\n"
+				"Flat bonuses to this skill's minion health attribute, become % increases instead.\n"
+				"Resets on realm completion, not realm entrance.").format(**self.fmt_dict())
+
+	def complete(self, evt):
+		self.tag_comboes.clear()
+
+	def on_enter(self, evt):
+		if are_hostile(evt.unit, self.owner):
+			return
+		if evt.unit == self.owner:
+			
+			return
+		tag_combo = evt.unit.tags
+		if tag_combo in self.tag_comboes:
+			return
+		self.tag_comboes.append(tag_combo)
+		evt.unit.apply_buff(VariegatedScales(self))
+
+
+
 class QuickAndDead(Upgrade):
 	def on_init(self):
 		self.name = "Quick and Dead"
 		self.level = 0
 		self.tags = [Tags.Nature, Tags.Dark]
-		self.description = "Once per realm when you target any [living] unit with any spell, give one non-modified ally the quickened modifier. Each time you target an [undead] unit with any spell, you can trigger this effect again."
-
-## The Recursion Orb - Has X max hp. When it dies it reincarnates with X-1 HP. Each time it dies it does something fucking awesome?
+		self.description = ("Once per realm when you target any [living] unit with any spell, give one non-modified ally the quickened modifier.\n"
+							"Each time you target an [undead] unit with any spell, you can trigger this effect again in that realm.")
+		self.owner_triggers[EventOnSpellCast] = self.on_cast
+		
+	def on_cast(self, evt):
+		unit = self.owner.level.get_unit_at(evt.x, evt.y)
+		if unit == None:
+			return
+## The Recursion Orb - Has X max hp. When it dies it reincarnates with X-1 HP.
 
 def construct_skills():
 	skillcon = [FromAshes, Lucky13, PsionicBlast, Crescendo, Librarian, BoneShaping, Chiroptyvern, Condensation, Discharge, PoisonousCopy, 
@@ -3732,7 +3920,8 @@ def construct_skills():
 				ChaosScaleLantern, AuraReading, Hindsight, Pleonasm, Triskadecaphobia, VoidCaller, OrbWeaver, LightningReflexes, TheFirstSeal, ChaosLord,
 				DarkBargain, TheHitList, ArcticPoles, Overkill, Recyclone, Orders, Mechanize, SlimeScholar, Agoraphobia, ForcedDonation, IcyShambler,
 				SixthSense, SpeakerForDead, NarrowSouled, FireBreathing, VowOfPoverty, RenounceDarkness, DazzlingMovement, Basics, SilverGorgonFamiliar,
-				ThiefOfTime, StratagemPriority, TowerKnight, ArmageddonEye, IceWyrmSong, SweetTalker, BloodSlimeLantern, ChaosOrb, Recursphere] ## ReanimationOrb, HeatedSlimeArmor, Quillgaze ##Soon to be released, basically finished
+				ThiefOfTime, StratagemPriority, TowerKnight, ArmageddonEye, IceWyrmSong, SweetTalker, BloodSlimeLantern, ChaosOrb, Recursphere,
+				ReanimationOrb, HeatedSlimeArmor, Quillgaze, Teleportitis, Silkwyrm, Variegation]
 	
 	## AngularGeometry OneWithNothing
 	print("Added " + str(len(skillcon)) + " skills")
