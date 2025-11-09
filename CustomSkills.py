@@ -1,4 +1,3 @@
-from msvcrt import kbhit
 import sys
 
 sys.path.append('../..')
@@ -284,39 +283,6 @@ class PsionicBlast(Upgrade):
 			unit = units.pop(0)
 			unit.deal_damage(self.get_stat('damage'), Tags.Arcane, self)
 
-class BatBreathChiro(BreathWeapon):
-	def on_init(self):
-		self.name = "Torrent of Bats"
-		self.damage = 7
-		self.damage_type = Tags.Physical
-
-	def get_description(self):
-		return "Breathes a cone of bats dealing %d damage to occupied tiles and summoning bats for 4 turns in empty ones." % self.damage
-
-	def per_square_effect(self, x, y):
-		bat = Bat()
-		unit = self.caster.level.get_unit_at(x, y)
-		if unit:
-			self.caster.level.deal_damage(x, y, self.damage, self.damage_type, self)
-		else:
-			bat.turns_to_death = 4
-			self.summon(bat, Point(x, y))
-
-def ChiroDragon():
-	dragon = Unit()
-	dragon.name = "Chiroptivyern"
-	dragon.asset = ["TcrsCustomModpack", "Units", "wyrm_bat"]
-
-	dragon.max_hp = 75
-	dragon.burrowing = True
-	dragon.buffs.append(RegenBuff(8))
-	dragon.resists[Tags.Dark] = 75
-	dragon.tags = [Tags.Dragon, Tags.Living, Tags.Dark]
-	
-	dragon.spells.append(BatBreathChiro())
-	dragon.spells.append(SimpleMeleeAttack(8))
-
-	return dragon
 
 class Chiroptyvern(Upgrade):
 	def on_init(self):
@@ -988,44 +954,6 @@ class WeaverOfOccultism(Upgrade):
 		return [GhostVoid(), DeathGhost(), HolyGhost(), Bloodghast()]
 
 
-class MaterialSlimeBuff(SlimeBuff):
-	def __init__(self, growth_chance=.5):
-		Buff.__init__(self)
-		self.description = ("50%% chance to heal for 10%% of original max HP each turn.\n"
-							"Excess healing from this effect raises max HP.\n")
-
-		self.name = "Slime Growth"
-		self.color = Tags.Slime.color
-		self.growth_chance = growth_chance
-
-	def on_applied(self, owner):
-		self.start_hp = owner.max_hp
-		self.to_split = self.start_hp * 2
-		self.growth = self.start_hp // 10
-		self.description = ("50%% chance to heal for %d HP each turn.\n"
-							"Excess healing from this effect raises max HP.") % (self.growth)
-
-	def on_advance(self):
-		if random.random() >= self.growth_chance:
-			return
-
-		owner = self.owner
-		growth = self.growth
-		cur = owner.cur_hp
-		if (cur + growth) >= self.owner.max_hp:
-			owner.max_hp = cur + growth
-		owner.heal(growth, self)
-
-def MaterialSlime():
-	unit = Unit()
-	unit.name = "Weave-Slime"
-	unit.asset = ["TcrsCustomModpack", "Units", "matslime_n"]
-	unit.description = "A slime woven from magic"
-	unit.max_hp = 15
-	unit.spells.append(SimpleMeleeAttack(5))
-	unit.tags = [Tags.Slime]
-	unit.resists[Tags.Poison] = 100
-	return unit
 
 class WeaverOfMaterialism(Upgrade):
 	def on_init(self):
@@ -1043,44 +971,19 @@ class WeaverOfMaterialism(Upgrade):
 
 	def get_description(self):
 		return ("For every 3 [slime], [dragon], and [metallic] spells you cast, summon a slime at the third spell's target tile for [{minion_duration}_turns:minion_duration]. Multiple tags multiply its base stats.\n" +
-				"If the [slime] tag was in any spell, the slime randomly gains max hp.\n"
+				"If the [slime] tag was in any spell, the slime splits into random slimes from this skill.\n"
 				"If the [dragon] tag was in any spell, the slime gains a breath attack.\n"
 				"If the [metallic] tag was in any spell, the slime gains metallic resistances and melee retaliation damage.\n"
 				"Does not work with free spells.").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
 		slime = MaterialSlime()
-		slime.name = "Weave-Slime Whelp Spiker"
-		slime.asset = ["TcrsCustomModpack", "Units", "matslime_n"]
+		slime.name = "Woven Slime"
+		slime.asset = ["TcrsCustomModpack", "Units-Variant", "matslime_n"]
 		return [slime]
 
 	def get_slime(self, tags):
-		spell_tags = tags
-		unit = MaterialSlime()
-		unit.name = "Weave-Slime"
-		suffix = "_"
-		
-		if Tags.Slime in spell_tags:
-			unit.buffs.append(MaterialSlimeBuff(0.5))
-			suffix += "n"
-		if Tags.Dragon in spell_tags:
-			unit.tags.append(Tags.Dragon)
-			unit.name  += " Whelp"
-			poison_breath = FireBreath()
-			poison_breath.damage_type = Tags.Poison
-			poison_breath.name = "Poison Breath"
-			unit.spells.append(poison_breath)
-			suffix += "r"
-		if Tags.Metallic in spell_tags:
-			unit.tags.append(Tags.Metallic)
-			unit.buffs.append(Thorns(6, Tags.Physical))
-			unit.name += " Spiker"
-			suffix += "m"
-
-		unit.asset = ["TcrsCustomModpack", "Units", "matslime" + suffix]
-		unit.max_hp *= len(tags)
-		for s in unit.spells:
-			s.damage *= len(tags)
+		unit = MaterialSlime(tags)
 		return unit
 
 	def make_slime(self, unit, point):
@@ -1128,7 +1031,7 @@ class Scrapheap(Upgrade):
 		if self.counter >= 10: 
 			unit = Golem()
 			unit.name = "Scrap Golem"
-			unit.asset = ["TcrsCustomModpack", "Units", "golem_scrap"+str(random.randint(1,6))]
+			unit.asset = ["TcrsCustomModpack", "Units-Variant", "golem_scrap"+str(random.randint(1,6))]
 			for i in range(self.scrap + 1):
 				r = random.random()
 				if r < 0.5:
@@ -1764,37 +1667,6 @@ class Triskadecaphobia(Upgrade):
 				unit.apply_buff(FearBuff(), 1)
 			self.tiles = 0
 
-def VoidWyrm():
-	unit = Unit()
-	unit.name = "Void Wyrm"
-	unit.asset = ["TcrsCustomModpack", "Units", "wyrm_void"]
-	unit.max_hp = 75
-
-	unit.spells.append(VoidBreath())
-	unit.spells.append(SimpleMeleeAttack(14, trample=True))
-
-	unit.tags = [Tags.Arcane, Tags.Dragon, Tags.Living]
-	unit.resists[Tags.Arcane] = 100
-	
-	unit.buffs.append(RegenBuff(8))
-	unit.burrowing = True
-	return unit
-
-def GoldWyrm():
-	unit = Unit()
-	unit.name = "Gold Wyrm"
-	unit.asset = ["TcrsCustomModpack", "Units", "wyrm_gold"]
-	unit.max_hp = 75
-
-	unit.spells.append(HolyBreath())
-	unit.spells.append(SimpleMeleeAttack(14, trample=True))
-
-	unit.tags = [Tags.Holy, Tags.Dragon, Tags.Living]
-	unit.resists[Tags.Holy] = 100
-	
-	unit.buffs.append(RegenBuff(8))
-	unit.burrowing = True
-	return unit
 
 class VoidCaller(Upgrade):
 	def on_init(self):
@@ -2341,7 +2213,6 @@ class SlimeScholar(Upgrade):
 		if Tags.Slime not in evt.unit.tags or are_hostile(self.owner, evt.unit):
 			return
 		self.count += evt.unit.max_hp
-		print(self.count)
 
 
 
@@ -2471,38 +2342,6 @@ class ForcedDonation(Upgrade):
 		self.owner.apply_buff(BloodBagBuff(amount_drained), self.get_stat('duration'))
 
 
-def IceShambler(HP=1):
-	unit = Unit()
-	unit.max_hp = HP
-	unit.tags = [Tags.Elemental, Tags.Ice, Tags.Undead]
-	unit.resists[Tags.Ice] = 100
-	unit.resists[Tags.Fire] = -100
-
-	if HP >= 64:
-		unit.name = "Iceberg Shambler"
-		unit.asset = ["TcrsCustomModpack", "Units", "ice_shambler_large"]
-		unit.spells.append(SimpleRangedAttack(damage=16, range=4, damage_type=Tags.Ice, buff=FrozenBuff, buff_duration=1))
-	elif HP >= 8:
-		unit.name = "Ice Shambler"
-		unit.asset = ["TcrsCustomModpack", "Units", "ice_shambler_med"]
-		unit.spells.append(SimpleRangedAttack(damage=8, range=3, damage_type=Tags.Ice, buff=FrozenBuff, buff_duration=1))
-	else:
-		unit.name = "Icicle Shambler"
-		unit.asset = ["TcrsCustomModpack", "Units", "ice_shambler_small"]
-		unit.spells.append(SimpleRangedAttack(damage=4, range=2, damage_type=Tags.Ice, buff=FrozenBuff, buff_duration=1))
-
-	unit.description = "Jagged ice and marrow given unlife."
-	if HP >= 8:
-		unit.description += "  Splits into 4 smaller Ice Shamblers upon death."
-		unit.buffs.append(SplittingBuff(spawner=lambda : IceShambler(unit.max_hp // 4), children=4))
-		
-	return unit
-
-def IceShambler_Big(HP=64):
-	return IceShambler(64)
-
-def IceShambler_Med(HP=8):
-	return IceShambler(8)
 
 class IcyShambler(Upgrade):
 	def on_init(self):
@@ -3136,30 +2975,6 @@ class StratagemPriority(Upgrade):
 		direction = random.choice(["Left", "Right", "Up", "Down"])
 		self.owner.apply_buff(DirectionalOrders(self, Point(self.owner.x, self.owner.y), direction), 1)
 
-def ShieldKnight():
-	unit = Unit()
-	unit.name = "Tower Knight"
-	unit.asset = ["TcrsCustomModpack", "Units", "shield_knight"]
-
-	unit.max_hp = 80
-	unit.shields = 8
-	
-	unit.tags = [Tags.Arcane, Tags.Metallic, Tags.Living]
-	unit.resists[Tags.Physical] = 75
-	unit.resists[Tags.Arcane] = 75
-	unit.resists[Tags.Fire] = 50
-	unit.resists[Tags.Lightning] = 50
-	unit.resists[Tags.Ice] = 50
-
-	def shield_on_hit(knight, target):
-		if knight.shields <= 8:
-			knight.shields += 1
-	melee = SimpleMeleeAttack(damage=10, damage_type=Tags.Physical, onhit=shield_on_hit)
-	melee.description  = "Gain 1 shield on hit, up to 8"
-	unit.spells.append(melee)
-	unit.buffs.append(ShieldRegenBuff(shield_freq=3, shield_max=8))
-	
-	return unit
 
 
 class TowerKnight(Upgrade):
@@ -3336,7 +3151,7 @@ class BloodSlimeLantern(Upgrade):
 
 	def get_description(self):
 		return ("Whenever you cast a [Blood] or [Slime] spell, gain Oozeclot Lantern with duration equal to twice the spell's level.\n"
-				"Oozeclot heals one ally in line of sight, each turn, for [{damage}_hp:heal, gives half of that value as max hp, and adds 2 stacks of bloodrage which lasts [{duration}_turns:duration].").format(**self.fmt_dict())
+				"Oozeclot heals one ally in line of sight, each turn, for [{damage}_hp:heal], gives half of that value as max hp, and adds 2 stacks of bloodrage which lasts [{duration}_turns:duration].").format(**self.fmt_dict())
 
 	def on_spell_cast(self, evt):
 		if Tags.Slime in evt.spell.tags or Tags.Blood in evt.spell.tags:
@@ -3727,52 +3542,6 @@ class Teleportitis(Upgrade):
 			evt.unit.apply_buff(TeleportationSickness(self), 7)
 		
 
-class SilkBreath(BreathWeapon):
-	def __init__(self, skill=None):
-		BreathWeapon.__init__(self)
-		self.name = "Web Spew"
-		if skill:
-			self.skill = skill
-		self.damage = 2
-		self.duration = 12
-		self.damage_type = Tags.Poison
-		self.cool_down = 14
-		self.range = 8
-		self.angle = math.pi / 5.0
-
-	def get_description(self):
-		return "Produces webs which last for 12 turns."
-
-	def per_square_effect(self, x, y):
-		cloud = SpiderWeb()
-		cloud.owner = self.owner
-		self.caster.level.add_obj(cloud, x, y)
-		self.caster.level.deal_damage(x, y, self.damage, Tags.Poison, self)
-
-
-def SpiderDragon(skill=None):
-	unit = Unit()
-	unit.name = "Silkwyrm"
-	unit.asset = ["TcrsCustomModpack", "Units", "wyrm_spider"] ##Modified aelf spider sprite plus wyrm. Very derivative
-	unit.max_hp = 75
-
-	def StunDmgBonus(owner, target):
-		if not target:
-			return
-		if target.has_buff(Stun):
-			target.deal_damage(44, Tags.Poison, melee)
-	melee = SimpleMeleeAttack(16, onhit=StunDmgBonus)
-	melee.description = "Deals 44 bonus [poison] damage to stunned targets."
-	unit.spells.append(melee)
-	breath = SilkBreath(skill)
-	unit.spells.append(breath)
-	websling = PullAttack(damage=2,damage_type=Tags.Physical,range=8,pull_squares=4,color=Tags.Tongue.color)
-	unit.spells.append(websling)
-
-	unit.tags = [Tags.Spider, Tags.Dragon, Tags.Living]
-	unit.resists[Tags.Poison] = 100
-	unit.resists[Tags.Fire] = -100
-	return unit
 
 class DragonWeb(SpiderWeb):
 	def __init__(self, skill, point):
@@ -3912,6 +3681,15 @@ class QuickAndDead(Upgrade):
 		if unit == None:
 			return
 ## The Recursion Orb - Has X max hp. When it dies it reincarnates with X-1 HP.
+
+class Metamagic(Upgrade):
+	def on_init(self):
+		self.name = "Metamagic"
+		self.level = 0
+		self.description = ("Every X turns gain metamagic, a buff which gives your highest level spell a bonus from your lowest level spell.\n" +
+							" It inherits: damage, minion damage, range, radius, num summons, and duration. The spell can't gain more than 50% of its damage and it can gain only up to 2 of the other categories.")
+
+
 
 def construct_skills():
 	skillcon = [FromAshes, Lucky13, PsionicBlast, Crescendo, Librarian, BoneShaping, Chiroptyvern, Condensation, Discharge, PoisonousCopy, 
