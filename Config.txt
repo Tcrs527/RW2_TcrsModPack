@@ -1,1 +1,1 @@
-spawn_monsters = False
+spawn_monsters = True

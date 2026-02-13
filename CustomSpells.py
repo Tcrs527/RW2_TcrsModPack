@@ -1,6 +1,3 @@
-from operator import le
-from os import listdir
-import queue
 import sys
 import os.path
 
@@ -257,19 +254,6 @@ class CauldronBuff(Buff):
 			self.counter_max -= 5
 		self.description = ("When %d damage is done by allied minions, summon a toad." % self.counter_max)
 
-def GiantToadGhost():
-	unit = Unit()
-	unit.name = 'Ghoulish Ghosttoad'
-	unit.asset = ["TcrsCustomModpack", "Units", "ghost_toad_giant"]
-	unit.max_hp = 85
-	unit.buffs.append(TrollRegenBuff())
-	tongue_attack = PullAttack(damage=3, range=8, color=Tags.Tongue.color)
-	tongue_attack.name = "Tongue Lash"
-	unit.spells.append(ToadHop())
-	unit.spells.append(SimpleMeleeAttack(damage=15, trample=True))
-	unit.spells.append(tongue_attack)
-	unit.tags = [Tags.Undead, Tags.Nature]
-	return unit
 
 def Cauldron():
 	unit = Idol()
@@ -1126,52 +1110,7 @@ class Icepath(Spell):
 		target = Point(x, y)
 		return list(Bolt(self.caster.level, start, target))
 
-class ScrollBreath(BreathWeapon):
-	def on_init(self):
-		self.name = "Reading Rainbow"
-		self.damage = 8
-		self.damage_type = [Tags.Fire, Tags.Ice, Tags.Lightning, Tags.Arcane, Tags.Dark, Tags.Poison, Tags.Holy, Tags.Physical]
-		self.cool_down = 6
-		self.scrolls = ScrollConvertor()
-		self.scrolls[Tags.Metallic] = [MetalShard,LivingMetalScroll]
 
-	def get_description(self):
-		return "Breathes a cone of pure linguistics dealing %d damage to occupied tiles and summoning scrolls in empty ones." % self.damage
-
-	def make_scrolls(self,tag):
-		if tag == Tags.Poison:
-			tag = Tags.Nature
-		elif tag == Tags.Physical:
-			tag = Tags.Metallic
-		unit = self.scrolls.get(tag)[1]()
-		cantrip = grant_minion_spell(self.scrolls.get(tag)[0], unit, self.caster, 3)
-		unit.apply_buff(LivingScrollSuicide())
-		return unit
-
-	def per_square_effect(self, x, y):
-		tag = random.choice(self.damage_type)
-		scroll = self.make_scrolls(tag)
-		scroll.turns_to_death = 2
-		unit = self.caster.level.get_unit_at(x, y)
-		if unit:
-			self.caster.level.deal_damage(x, y, self.damage, tag, self) ##Some sort of error involving this. Maybe it killed a target and tried to summon a scroll also?
-		else:
-			self.summon(scroll, Point(x, y))
-			
-def BookWyrm():
-	dragon = Unit()
-	dragon.name = "Bookwyrm"
-	dragon.asset = ["TcrsCustomModpack", "Units", "bookwyrm"]
-	dragon.tags = [Tags.Dragon, Tags.Construct, Tags.Sorcery]
-
-	dragon.max_hp = 31
-	dragon.shields = 1
-	dragon.flying = True
-	dragon.spells.append(ScrollBreath())
-	dragon.spells.append(SimpleMeleeAttack(8))
-
-	return dragon
-		
 class SummonBookwyrm(Spell):
 	def on_init(self):
 		self.name = "Word of Wyrms"
@@ -1512,6 +1451,7 @@ class WordofFilth(Spell):
 
 	def make_worms(self):
 		u = RockWurm()
+		u = MindMaggot() ##TODO REMOVE!
 		u.max_hp = self.get_stat('minion_health')
 		u.spells[0].damage = self.get_stat('minion_damage')
 		return u
@@ -2408,22 +2348,6 @@ class Machination(Spell):
 				first = False
 
 
-def SkullWorm():
-	unit = Unit()
-	unit.max_hp = 35
-	unit.name = "Skullsnake"
-	unit.asset = ["TcrsCustomModpack", "Units", "skullworm"]
-	unit.tags = [Tags.Nature, Tags.Dark, Tags.Undead]
-
-	unit.spells.append(SimpleMeleeAttack(12))
-
-	unit.resists[Tags.Physical] = 50
-	unit.resists[Tags.Dark] = 100
-	unit.resists[Tags.Poison] = 100
-	unit.resists[Tags.Ice] = -50
-
-	unit.burrowing = True
-	return unit
 
 class Skullbuffery(Buff):
 	def __init__(self, spell):
@@ -3204,17 +3128,6 @@ class RainbowSeal(Spell): ##Alternatives Crystal Wrath -> Arcane Ice Holy Lightn
 
 
 
-class ShrapnelBreath(BreathWeapon):
-	def on_init(self):
-		self.name = "Shrapnel Breath"
-		self.damage_type = Tags.Physical
-
-	def get_description(self):
-		return "Breathes a cone of shrapnel dealing %d [physical] damage" % self.damage
-
-	def per_square_effect(self, x, y):
-		self.caster.level.deal_damage(x, y, self.damage, self.damage_type, self)
-
 class SteelFangsBuff(Buff):
 	def __init__(self, spell):
 		Buff.__init__(self)
@@ -3569,45 +3482,7 @@ class SnakePhilosophy_Advanced(SnakePhilosophy):
 
 
 
-class CowardlyBuff(Buff):
-	def __init__(self, spell):
-		Buff.__init__(self)
-		self.spell = spell
-
-	def on_init(self):
-		self.name = "Coward"
-		self.stack_type = STACK_REPLACE
-		self.buff_type = BUFF_TYPE_NONE
-		self.color = Tags.Dark.color
-		
-	def on_advance(self):
-		units = [u for u in self.owner.level.get_units_in_ball(self.owner, 3) if are_hostile(self.owner, u) and (Tags.Dark in u.tags or Tags.Undead in u.tags or u.name == "Wizard")]
-		if units == []:
-			return
-		scared = False
-		wizard = False
-		for u in units:
-			if u.name == "Wizard":
-				wizard = True
-				break
-			elif Tags.Dark in u.tags or Tags.Undead in u.tags:
-				scared = True
-		if scared and not wizard:
-			self.owner.apply_buff(FearBuff(), 2)
-
-def CowardlyLion():
-	unit = Unit()
-	unit.name = "Cowardly Lion"
-	unit.asset = ["TcrsCustomModpack", "Units", "cowardly_lion"] ##One single pixel on the back leg is red instead of yellow
-	unit.max_hp = 100
-	unit.spells.append(SimpleMeleeAttack(19))
-	unit.tags = [Tags.Living]
-	unit.resists[Tags.Physical] = 50
-	unit.resists[Tags.Holy] = 50
-	unit.resists[Tags.Dark] = -100
-	return unit
-
-class BeckonCowardlyLion(Spell):
+class BeckonCowardlyLion(Spell): ## TODO fix leg in unit sprite
 	def on_init(self):
 		self.name = "Cowardly Lion"
 		self.tags = [Tags.Nature, Tags.Conjuration]
@@ -3623,23 +3498,23 @@ class BeckonCowardlyLion(Spell):
 
 		self.upgrades['pride'] = (1, 5, "Pride", "Your Lion becomes [fire], [ice], or [arcane] and can summon a corresponding lion on a 10 turn cooldown.")
 		self.upgrades['roar'] = (1, 5, "Dreadful Roar", "Your Lion becomes [dark] gains your wave of dread spell on a 10 turn cooldown.", [Tags.Dark]) ##TODO make afraid of holy?
-		self.upgrades['fearless'] = (1, 5, "Fearless", "Your Lion becomes [holy] and is not afraid of [Dark] or [Undead] units, and gains a holy leaping attack with 6 range.", [Tags.Holy])
+		self.upgrades['fearless'] = (1, 5, "Fearless", "Your Lion becomes [holy], is not afraid of units anymore, and gains a holy leaping attack with 6 range.", [Tags.Holy])
 
 	def get_description(self):
-		return ("Call forth a cowardly lion, who gains the fear debuff if any [dark], or [undead] units are within 3 tiles and the wizard is not within 3 tiles.\n"
+		return ("Call forth a cowardly lion, who gains the fear debuff if any [dark], [undead], or [demon] units are within 3 tiles and the wizard is not within 3 tiles.\n"
 				"Cowardly Lions have [{minion_health}_HP:minion_health] and an attack which deals [{minion_damage}_physical:physical] damage.").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
-		return [CowardlyLion(), self.spell_upgrades[0], RedLion(), IceLion(), StarLion(), self.spell_upgrades[1], self.spell_upgrades[2]]
+		return [CowardlyLion(self), self.spell_upgrades[0], RedLion(), IceLion(), StarLion(), self.spell_upgrades[1], self.spell_upgrades[2]]
 
-	def cast(self, x, y):
-		unit = CowardlyLion()
+	def make_unit(self):
+		unit = CowardlyLion(self)
 		if self.get_stat('fearless'):
+			buff = unit.get_buff(CowardlyBuff)
+			unit.remove_buff(buff)
 			unit.tags.append(Tags.Holy)
 			leap = LeapAttack(damage=self.get_stat('minion_damage'), range=self.get_stat('minion_range',base=6), is_leap=True, damage_type=Tags.Holy)
 			unit.spells.insert(0, leap)
-		else:
-			unit.apply_buff(CowardlyBuff(self))
 		if self.get_stat('pride'):
 			lion = random.choice([[Tags.Fire, RedLion], [Tags.Ice, IceLion], [Tags.Arcane, StarLion]])
 			summon_lion = SimpleSummon(spawn_func=lion[1], num_summons=1, cool_down=10)
@@ -3649,6 +3524,10 @@ class BeckonCowardlyLion(Spell):
 			unit.tags.append(Tags.Dark)
 			grant_minion_spell(WaveOfDread, unit, self.caster, 10, True)
 		apply_minion_bonuses(self, unit)
+		return unit
+
+	def cast(self, x, y):
+		unit = self.make_unit()
 		self.summon(unit, Point(x,y))
 		yield
 
@@ -4892,7 +4771,37 @@ class Landmines(Spell):
 		self.caster.level.add_obj(prop, x, y)
 
 
+class SeaWyrmBreathUpgrades(BreathWeapon):
+	def __init__(self, spell=None):
+		self.spell = spell
+		BreathWeapon.__init__(self)
+		self.name = "Poisonous Breath"
+		self.damage = 10
+		self.duration = 5
+		self.damage_type = Tags.Poison
+		self.cool_down = 3
+		self.range = 5
+		self.angle = math.pi / 6.0
 
+	def get_description(self):
+		return "Applies 5 turns of poison"
+
+	def per_square_effect(self, x, y):
+		if self.spell.get_stat('gaseous'):
+			cloud = self.spell.owner.get_or_make_spell(PoisonousGas).make_cloud(self.caster)
+			self.caster.level.add_obj(cloud, x, y)
+		if self.spell.get_stat('rainy'):
+			rain_storm = self.spell.owner.get_or_make_spell(RainStormSpell)
+			cloud = RainCloud(self.spell.owner, spell=rain_storm)
+			cloud.duration = rain_storm.get_stat('duration')
+			self.caster.level.add_obj(cloud, x, y)
+			
+		unit = self.caster.level.get_unit_at(x, y)
+		if unit:
+			self.caster.level.deal_damage(x, y, self.get_stat('damage'), self.damage_type, self)
+			unit.apply_buff(Poison(), self.get_stat('duration'))
+		else:
+			self.caster.level.deal_damage(x, y, 0, self.damage_type, self)
 
 class SeaSerpent(Spell):
 	def on_init(self):
@@ -4923,22 +4832,22 @@ class SeaSerpent(Spell):
 				"and a trampling melee attack which deals [{minion_damage}_physical:physical] damage.").format(**self.fmt_dict())
 	
 	def get_extra_examine_tooltips(self):
-		return [self.wyrm(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2]]
+		return [self.make_unit(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2]]
 
-	def wyrm(self):
+	def make_unit(self):
 		wyrm = SeaSerpent_Unit(self)
+		breath = SeaWyrmBreathUpgrades(self)
+		breath.caster = wyrm
+		breath.owner = wyrm
+		wyrm.spells.pop(0)
+		wyrm.spells.insert(0,breath)
 		apply_minion_bonuses(self, wyrm)
-		#wyrm.max_hp = self.get_stat('minion_health')
-		#wyrm.spells[0].damage = self.get_stat('breath_damage')
-		#wyrm.spells[0].range = self.get_stat('minion_range')
-		#wyrm.spells[1].damage = self.get_stat('minion_damage')
 		if self.get_stat('abc'):
 			alphabet = {}
 			for s in self.caster.spells:
 				for letter in s.name:
 					if letter.lower() not in [' ', '\'', '%', ':']:
 						alphabet[letter] = True
-			#print(alphabet.items())
 			num_letters = len(alphabet)
 			wyrm.max_hp += num_letters * 5
 			wyrm.spells[0].damage += num_letters
@@ -4946,7 +4855,7 @@ class SeaSerpent(Spell):
 		return wyrm
 
 	def cast_instant(self, x ,y):
-		unit = self.wyrm()
+		unit = self.make_unit()
 		self.summon(unit, Point(x, y))
 
 
@@ -6548,15 +6457,15 @@ class SummonRiftstalker(Spell):
 		self.upgrades['conj'] = (1, 9, "Spellsucker", "Every other [conjuration] spell you know adds 25% of its minion health to the riftstalker. Repeat with minion damage and minion range, given to its leap attack.")
 
 	def get_extra_examine_tooltips(self):
-		return [Riftstalker(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2]]
+		return [self.make_unit(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2]]
 
 	def get_description(self):
 		return ("Summons a riftstalker at target tile.\nIts base hp is [{minion_health}_HP:minion_health] its base shields are [{shields}:shields], and "
 				"it has a leaping attack which deals [{minion_damage}_arcane:arcane] with a range of [{minion_range}_tiles:minion_range].\n"
-				"If you target a rift with the spell, the riftstalker's base minion health, damage, and shields are doubled.").format(**self.fmt_dict())
+				"If you target a rift with the spell, the riftstalker's minion health, damage, and shields are doubled.").format(**self.fmt_dict())
 
 	## Known problems with spider queen. Can be solved with a few if conditions if I want to, but it's kind of an ugly if condition
-	def cast_instant(self, x, y):
+	def make_unit(self):
 		unit = Riftstalker()
 		unit.shields = self.get_stat('shields')
 		if self.get_stat('warp'):
@@ -6583,15 +6492,20 @@ class SummonRiftstalker(Spell):
 			unit.spells[0].damage += attr_dict['minion_damage']
 			unit.spells[0].range += attr_dict['minion_range']
 
+		apply_minion_bonuses(self, unit)
+		return unit
+
+	def cast_instant(self, x, y):
+		unit = self.make_unit()
+
 		t = self.caster.level.tiles[x][y]
 		if t == None:
 			pass
 		elif type(t.prop) == Portal:
-			unit.shields += 4
+			unit.shields *= 2
 			unit.max_hp *= 2
 			unit.spells[0].damage *= 2
 			
-		apply_minion_bonuses(self, unit)
 		self.summon(unit, target=Point(x, y))
 		
 		if self.get_stat('mind'):
@@ -6599,8 +6513,9 @@ class SummonRiftstalker(Spell):
 			for s in self.caster.spells:
 				if Tags.Lightning in s.tags or Tags.Fire in s.tags:
 					count += 1
-			self.caster.apply_buff(Silence(), 10)
+			self.caster.apply_buff(Silence(), 3)
 			unit.apply_buff(HasteBuff(), self.get_stat('duration',base=count*3))
+
 
 class Reflector(Buff):
 	def __init__(self, spell):
@@ -6729,7 +6644,6 @@ class IdolOfReflection(Spell):
 		self.summon(unit, Point(x,y))
 
 
-
 class ObsidianDagger(Spell):
 	def on_init(self):
 		self.name = "Obsidian Dagger"
@@ -6815,7 +6729,7 @@ class Furious(Buff):
 		self.spell = spell
 		Buff.__init__(self)
 	def on_init(self):
-		self.name = "Fury"
+		self.name = "Curse of Fury"
 		self.color = Tags.Blood.color
 		self.asset = ['status', 'darkness']
 		self.global_triggers[EventOnDeath] = self.on_death
@@ -6851,7 +6765,7 @@ class WordofBlood(Spell):
 		self.upgrades['blind'] = (1, 3, "Blind Fury", "Blinds and Berserks all affected units for 1 turn on cast.", [Tags.Chaos])
 
 	def get_description(self):
-		return ("All [living] and [demon] units, including the wizard, gain Fury for [{duration}_turns:duration].\n"
+		return ("All [living] and [demon] units, including the wizard, gain Curse of Fury for [{duration}_turns:duration].\n"
 				"Each unit with Fury takes 1 [dark] and [fire] damage each turn, increasing by 1 each turn.\n"
 				"Fury is removed if any adjacent unit dies.\n").format(**self.fmt_dict())
 
@@ -6868,7 +6782,6 @@ class WordofBlood(Spell):
 			if self.get_stat('blind'):
 				unit.apply_buff(BlindBuff(), 2)
 				unit.apply_buff(BerserkBuff(), 2)
-				
 
 
 
@@ -6877,7 +6790,13 @@ def SlimePriestTooltip(spell=None):
 	unit.name = "Goo Priest"
 	unit.asset = ["TcrsCustomModpack", "Units", "slimepriest_monster"]
 	unit.tags = [Tags.Living, Tags.Holy, Tags.Slime]
+	
 	unit.max_hp = 36
+	unit.resists[Tags.Poison] = 100
+	unit.resists[Tags.Holy] = 100
+	unit.resists[Tags.Physical] = - 50
+	unit.resists[Tags.Dark] = -100
+	unit.resists[Tags.Arcane] = -50
 
 	if spell:
 		unit.buffs.append(HealAuraBuff(spell.get_stat('heal'),spell.get_stat('radius')))
@@ -6917,9 +6836,9 @@ class SlimePriestSpell(Spell):
 				"Transformation Lasts [{minion_duration}_turns:minion_duration], and resets its hp.").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
-		return [SlimePriest(), SlimePriestTooltip(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2], RedSlimeCube(), IceSlimeCube(), VoidSlimeCube()]
+		return [self.make_unit(), SlimePriestTooltip(), self.spell_upgrades[0], self.spell_upgrades[1], self.spell_upgrades[2], RedSlimeCube(), IceSlimeCube(), VoidSlimeCube()]
 
-	def cast(self, x, y):
+	def make_unit(self):
 		unit = SlimePriest(self)
 		apply_minion_bonuses(self, unit)
 		unit.turns_to_death = None
@@ -6932,6 +6851,10 @@ class SlimePriestSpell(Spell):
 			unit.spells.append(SimpleSummon(spawn_func=temp_spider, num_summons=self.get_stat('num_summons',base=2), cool_down=15, duration=self.get_stat('minion_duration'), radius=5) )
 		if self.get_stat('cube'):
 			unit.buffs.append(RespawnAs( random.choice([RedSlimeCube, IceSlimeCube, VoidSlimeCube])))
+		return unit
+
+	def cast(self, x, y):
+		unit = self.make_unit()
 		self.summon(unit,Point(x, y))
 		
 		if self.get_stat('bloody'):
@@ -6955,64 +6878,16 @@ class IronAngelEmpathy(Buff):
 			return
 		self.owner.advance()
 
-class IronAngelCompassion(Buff):
-	def __init__(self, spell=None):
+class IronAngelCoolHeaded(Buff):
+	def __init__(self, spell):
 		Buff.__init__(self)
 		self.spell = spell
-		if self.spell != None:
-			if self.spell.get_stat('cold'):
-				self.owner_triggers[EventOnDeath] = self.on_death
-				
-	def on_init(self):
-		self.name = "Pure Compassion"
-		self.description = "Whenever another ally hurts an ally, despawn."
-		self.color = Tags.Holy.color
-		self.global_triggers[EventOnDamaged] = self.on_damage
-
-
-	def on_damage(self, evt):
-		if not evt.source:
-			return
-		if not evt.source.owner:
-			return
-		if type(evt.source) == Poison:
-			return
-		if evt.source.owner == self.owner:
-			return
-		if isinstance(evt.source, IronAngelCompassion):
-			return
-		if are_hostile(evt.source.owner, self.owner):
-			if are_hostile(evt.source.owner, evt.unit) and self.spell.get_stat('venge'): 
-				evt.source.owner.deal_damage(self.spell.get_stat('damage',base=8), Tags.Holy, self)
-			return
-		if not are_hostile(evt.source.owner, evt.unit):
-			self.owner.kill(trigger_death_event=False)
-			if not self.spell.get_stat('cold'):
-				return
-			spell = self.spell.caster.get_or_make_spell(SummonIcePhoenix)
-			p = Point(self.owner.x, self.owner.y)
-			self.spell.caster.level.act_cast(self.spell.caster, spell, p.x, p.y, pay_costs=False, queue=True)
+		self.owner_triggers[EventOnDeath] = self.on_death
 
 	def on_death(self, evt):
 		spell = self.spell.caster.get_or_make_spell(SummonIcePhoenix)
 		p = Point(self.owner.x, self.owner.y)
 		self.spell.caster.level.act_cast(self.spell.caster, spell, p.x, p.y, pay_costs=False, queue=True)
-
-def CompassionAngel(spell=None):
-	unit = Unit()
-	unit.max_hp = 80
-	unit.name = "Angel of Compassion"
-	unit.asset = ["TcrsCustomModpack", "Units", "angel_of_compassion"]
-	
-	unit.tags = [Tags.Holy]
-	unit.resists[Tags.Holy] = 100
-	unit.resists[Tags.Dark] = -100
-	unit.flying = True
-
-	unit.spells.append(SimpleMeleeAttack(damage=35,buff=Stun,buff_duration=1,damage_type=Tags.Holy,trample=True))
-	unit.buffs.append(ReincarnationBuff(5))
-	unit.buffs.append(IronAngelCompassion(spell))
-	return unit
 
 class SummonCompassionAngel(Spell):
 	def on_init(self):
@@ -7043,6 +6918,8 @@ class SummonCompassionAngel(Spell):
 		unit = CompassionAngel(self)
 		if self.get_stat('empathy'):
 			unit.apply_buff(IronAngelEmpathy(self))
+		if self.get_stat('cold'):
+			unit.apply_buff(IronAngelCoolHeaded(self))
 		self.summon(unit,Point(x, y))
 		yield
 
@@ -9312,7 +9189,6 @@ class HillSlicer(Spell):
 		for t in self.get_impacted_tiles(x, y):
 			self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Poison, self)
 			self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Physical, self)
-
 		yield
 
 
@@ -9571,7 +9447,7 @@ def construct_spells():
 				TrueNameCurse, GalvanizedSummon, JekylPotion, SummonRiftstalker, IdolOfReflection, ObsidianDagger,
 				WordofBlood, SlimePriestSpell, SummonCompassionAngel, OrbofBlindness, Verminform, RiftTremor, BloodTransfusion, FireEmUp,
 				ChainBolt, SpiritOrb, SlimeRay, WolfChampion, CreepingFrost, Trebuchet, Dissolution, AstraVirtue, AdaptivePulse, AvatarOfTiamat,
-				StonecoilSerpent, HagathaSpell]
+				StonecoilSerpent, HagathaSpell, Boltcutter, CultistOldFaith] #HillSlicer
 	
 	print("Added " + str(len(spellcon)) + " spells")
 	for s in spellcon:

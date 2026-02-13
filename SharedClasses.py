@@ -1,11 +1,13 @@
 from pydoc import describe
 from threading import main_thread
+
+
 import Spells
 import BossSpawns
 import copy
 from Level import *
 from Monsters import *
-from Variants import StarfireSnakeGiant, ChaosSnakeGiant, SnakeGiant
+from Variants import StarfireSnakeGiant, ChaosSnakeGiant, SnakeGiant, VoidClusterBomb
 from CommonContent import *
 
 print("General Content Loaded")
@@ -560,9 +562,9 @@ def Fishman():
 
 	unit.spells.append(SimpleMeleeAttack(8))
 	
-	unit.resists[Tags.Lightning] = -50
+	unit.resists[Tags.Lightning] = -100
+	unit.resists[Tags.Ice] = -100
 	unit.resists[Tags.Fire] = -50
-	unit.resists[Tags.Ice] = -50
 	unit.resists[Tags.Holy] = -50
 
 	return unit
@@ -667,6 +669,21 @@ def IdolDepths(spell=None):
 	idol.spells.append(Fishification(spell))
 	idol.resists[Tags.Dark] = 100
 	return idol
+
+
+def GiantToadGhost():
+	unit = Unit()
+	unit.name = 'Ghoulish Ghosttoad'
+	unit.asset = ["TcrsCustomModpack", "Units", "ghost_toad_giant"]
+	unit.max_hp = 85
+	unit.buffs.append(TrollRegenBuff())
+	tongue_attack = PullAttack(damage=3, range=8, color=Tags.Tongue.color)
+	tongue_attack.name = "Tongue Lash"
+	unit.spells.append(ToadHop())
+	unit.spells.append(SimpleMeleeAttack(damage=15, trample=True))
+	unit.spells.append(tongue_attack)
+	unit.tags = [Tags.Undead, Tags.Nature]
+	return unit
 
 
 def AmalgamateUnit(hp=127, spell=None):
@@ -778,12 +795,8 @@ def ChaosBeast(s=None):
 
 
 class SeaWyrmBreath(BreathWeapon):
-	def __init__(self, spell=None):
+	def __init__(self):
 		BreathWeapon.__init__(self)
-		if spell != None:
-			self.spell = spell
-		else:
-			self.spell = None
 		self.name = "Poisonous Breath"
 		self.damage = 10
 		self.duration = 5
@@ -796,16 +809,6 @@ class SeaWyrmBreath(BreathWeapon):
 		return "Applies 5 turns of poison"
 
 	def per_square_effect(self, x, y):
-		if self.spell != None:
-			if self.spell.get_stat('gaseous'):
-				cloud = self.spell.owner.get_or_make_spell(PoisonousGas).make_cloud(self.caster)
-				self.caster.level.add_obj(cloud, x, y)
-			if self.spell.get_stat('rainy'):
-				rain_storm = self.spell.owner.get_or_make_spell(RainStormSpell)
-				cloud = RainCloud(self.spell.owner, spell=rain_storm)
-				cloud.duration = rain_storm.get_stat('duration')
-				self.caster.level.add_obj(cloud, x, y)
-			
 		unit = self.caster.level.get_unit_at(x, y)
 		if unit:
 			self.caster.level.deal_damage(x, y, self.get_stat('damage'), self.damage_type, self)
@@ -819,7 +822,7 @@ def SeaSerpent_Unit(s=None):
 	unit.asset = ["TcrsCustomModpack", "Units", "sea_serpent_unit"]
 	unit.max_hp = 75
 
-	unit.spells.append(SeaWyrmBreath(s))
+	unit.spells.append(SeaWyrmBreath())
 	unit.spells.append(SimpleMeleeAttack(14, trample=True))
 
 	unit.tags = [Tags.Nature, Tags.Dragon, Tags.Living]
@@ -845,6 +848,43 @@ def SandElemental():
 	unit.tags = [Tags.Elemental, Tags.Nature]
 	unit.resists[Tags.Poison] = 100
 	unit.resists[Tags.Physical] = 75
+
+	return unit
+
+
+
+class RecycloneClone(Buff):
+	def __init__(self):
+		Buff.__init__(self)
+		self.name = "Recyclone Cloning"
+		self.buff_type = BUFF_TYPE_BLESS
+		self.color = Tags.Nature.color
+		self.description = "Makes a new recyclone everytime the wizard uses an item."
+		self.stack_type = STACK_NONE
+		
+		self.global_triggers[EventOnItemUsed] = self.on_item
+
+	def on_item(self, evt):
+		unit = RecycloneUnit()
+		self.owner.level.summon(self.owner, unit, Point(self.owner.x, self.owner.y))
+
+def RecycloneUnit(skill=None):
+	unit = Unit()
+	unit.name = "Recyclone"
+	unit.asset = ["TcrsCustomModpack", "Units", "recyclone2"]
+	unit.max_hp = 40
+
+	unit.spells.append(LeapAttack(damage=8, range=4))
+	if skill == None:
+		unit.buffs.append(RecycloneClone())
+
+	unit.flying = True
+	unit.tags = [Tags.Nature, Tags.Metallic, Tags.Elemental]
+	unit.resists[Tags.Poison] = 100
+	unit.resists[Tags.Ice] = 50
+	unit.resists[Tags.Lightning] = 50
+	unit.resists[Tags.Physical] = 50
+	unit.resists[Tags.Arcane] = -50
 
 	return unit
 
@@ -1177,6 +1217,62 @@ def SlimePriest(spell=None):
 	return unit
 
 
+def SkullWorm():
+	unit = Unit()
+	unit.max_hp = 35
+	unit.name = "Skullsnake"
+	unit.asset = ["TcrsCustomModpack", "Units", "skullworm"]
+	unit.tags = [Tags.Nature, Tags.Dark, Tags.Undead]
+
+	unit.spells.append(SimpleMeleeAttack(12))
+
+	unit.resists[Tags.Dark] = 100
+	unit.resists[Tags.Ice] = -100
+
+	unit.burrowing = True
+	return unit
+
+
+class NightsightEnemy(Buff):
+	def __init__(self):
+		Buff.__init__(self)
+
+	def on_init(self):
+		self.buff_type = BUFF_TYPE_PASSIVE
+		self.stack_type = STACK_NONE
+		self.color = Tags.Eye.color
+		self.description = "Every 2nd turn, if the wizard is in line of sight of this unit, it gains 4 max hp or 1 stack of bloodrage."
+
+	def on_advance(self):
+		if self.owner.level.turn_no % 2 == 0:
+			return
+		wizard = self.owner.level.player_unit
+		if self.owner.level.can_see(self.owner.x, self.owner.y, wizard.x, wizard.y):
+			if random.randint(1,2) == 1:
+				self.owner.max_hp += 4
+				self.owner.cur_hp += 4
+			else:
+				self.owner.apply_buff(BloodrageBuff(1))
+			for p in self.owner.level.get_points_in_line(Point(self.owner.x, self.owner.y), Point(wizard.x, wizard.y))[1:-1]:
+					self.owner.level.show_effect(p.x, p.y, Tags.Dark, minor=True)
+
+def EyeKnight(skill=None):
+	unit = Unit()
+	unit.name = "Eye Knight"
+	unit.asset =  ["TcrsCustomModpack", "Units", "eye_knight"]
+	unit.max_hp = 52
+	unit.resists[Tags.Physical] = 25
+	unit.resists[Tags.Arcane] = 25
+	unit.resists[Tags.Dark] = 75
+	if skill == None:
+		unit.buffs.append(NightsightEnemy())
+
+	unit.spells.append(SimpleMeleeAttack(damage=8, damage_type=Tags.Dark))
+	unit.tags = [Tags.Dark, Tags.Eye, Tags.Demon]
+
+	return unit
+
+
 def ShieldKnight():
 	unit = Unit()
 	unit.name = "Tower Knight"
@@ -1243,6 +1339,49 @@ def MaterialSlime(tags=[]):
 
 	return unit
 
+
+class CowardlyBuff(Buff):
+	def __init__(self, spell):
+		Buff.__init__(self)
+		self.spell = spell
+
+	def on_init(self):
+		self.name = "Cowardly"
+		self.description = "Becomes feared for 2 turns if within 3 tiles of a [dark], [undead], or [demon] hostile unit."
+		self.stack_type = STACK_REPLACE
+		self.buff_type = BUFF_TYPE_NONE
+		
+	def on_advance(self):
+		units = [u for u in self.owner.level.get_units_in_ball(self.owner, 3) if are_hostile(self.owner, u) and (Tags.Dark in u.tags or Tags.Undead in u.tags or Tags.Demon in u.tags)]
+		if units == []:
+			return
+		wizard = False
+		w = self.owner.level.player_unit
+		if are_hostile(w, self.owner):
+			self.owner.apply_buff(FearBuff(), 2)
+		if distance(Point(w.x, w.y), Point(self.owner.x, self.owner.y)) <= 3:
+			wizard = True
+		if not wizard:
+			self.owner.apply_buff(FearBuff(), 2)
+
+def CowardlyLion(spell=None):
+	unit = Unit()
+	unit.name = "Cowardly Lion"
+	unit.asset = ["TcrsCustomModpack", "Units", "cowardly_lion"]
+	unit.max_hp = 100
+	unit.spells.append(SimpleMeleeAttack(19))
+	if spell == None:
+		unit.buffs.append(CowardlyBuff(spell))
+	else:
+		if not spell.get_stat('fearless'):
+			unit.buffs.append(CowardlyBuff(spell))
+		else:
+			unit.name = "Fearless Lion"
+	unit.tags = [Tags.Living]
+	unit.resists[Tags.Physical] = 50
+	unit.resists[Tags.Holy] = 50
+	unit.resists[Tags.Dark] = -100
+	return unit
 
 
 
@@ -1462,6 +1601,52 @@ def ChaosWyrm():
 	return unit
 
 
+class ScrollBreath(BreathWeapon):
+	def on_init(self):
+		self.name = "Reading Rainbow"
+		self.damage = 8
+		self.damage_type = [Tags.Fire, Tags.Ice, Tags.Lightning, Tags.Arcane, Tags.Dark, Tags.Poison, Tags.Holy]
+		self.cool_down = 6
+		self.scrolls = ScrollConvertor()
+
+	def get_description(self):
+		return "Breathes a cone of pure linguistics dealing %d damage to occupied tiles and summoning scrolls in empty ones." % self.damage
+
+	def make_scrolls(self,tag):
+		if tag == Tags.Poison:
+			tag = Tags.Nature
+		elif tag == Tags.Physical:
+			tag = Tags.Metallic
+		unit = self.scrolls.get(tag)[1]()
+		cantrip = grant_minion_spell(self.scrolls.get(tag)[0], unit, self.caster, 3)
+		unit.apply_buff(LivingScrollSuicide())
+		return unit
+
+	def per_square_effect(self, x, y):
+		tag = random.choice(self.damage_type)
+		scroll = self.make_scrolls(tag)
+		scroll.turns_to_death = 2
+		unit = self.caster.level.get_unit_at(x, y)
+		if unit:
+			self.caster.level.deal_damage(x, y, self.damage, tag, self) ##Some sort of error involving this. Maybe it killed a target and tried to summon a scroll also?
+		else:
+			self.summon(scroll, Point(x, y))
+			
+def BookWyrm():
+	dragon = Unit()
+	dragon.name = "Bookwyrm"
+	dragon.asset = ["TcrsCustomModpack", "Units", "bookwyrm"]
+	dragon.tags = [Tags.Dragon, Tags.Construct, Tags.Sorcery]
+
+	dragon.max_hp = 31
+	dragon.shields = 2
+	dragon.flying = True
+	dragon.spells.append(ScrollBreath())
+	dragon.spells.append(SimpleMeleeAttack(8))
+
+	return dragon
+
+
 class PeriodicBerserking(Buff):
 	def __init__(self):
 		Buff.__init__(self)
@@ -1495,15 +1680,419 @@ def Berserker(spell=None):
 		unit.buffs.append(PeriodicBerserking())
 	return unit
 
+
+class ShrapnelBreath(BreathWeapon):
+	def on_init(self):
+		self.name = "Shrapnel Breath"
+		self.damage_type = Tags.Physical
+
+	def get_description(self):
+		return "Breathes a cone of shrapnel dealing %d [physical] damage" % self.damage
+
+	def per_square_effect(self, x, y):
+		self.caster.level.deal_damage(x, y, self.damage, self.damage_type, self)
+
+def SilverGorgon():
+	unit = GreenGorgon()
+	unit.asset = ["TcrsCustomModpack", "Units", "silver_gorgon"]
+	breath = ShrapnelBreath()
+	breath.cool_down = 3
+	breath.damage = 8
+	melee = SimpleMeleeAttack(damage=8, damage_type=Tags.Holy)
+	unit.spells = [breath, melee]
+	unit.tags = [Tags.Holy, Tags.Metallic, Tags.Living]
+	return unit
+
+
+class IronAngelCompassion(Buff):
+	def __init__(self, spell=None):
+		Buff.__init__(self)
+		self.spell = spell
+		if self.spell != None:
+			if self.spell.get_stat('cold'):
+				self.owner_triggers[EventOnDeath] = self.on_death
+				
+	def on_init(self):
+		self.name = "Pure Compassion"
+		self.description = "Whenever another ally hurts an ally, despawn."
+		self.color = Tags.Holy.color
+		self.global_triggers[EventOnDamaged] = self.on_damage
+
+
+	def on_damage(self, evt):
+		if not evt.source:
+			return
+		if not evt.source.owner:
+			return
+		if type(evt.source) == Poison:
+			return
+		if evt.source.owner == self.owner:
+			return
+		if isinstance(evt.source, IronAngelCompassion):
+			return
+		if are_hostile(evt.source.owner, self.owner):
+			if self.spell == None:
+				return
+			if are_hostile(evt.source.owner, evt.unit) and self.spell.get_stat('venge'): 
+				evt.source.owner.deal_damage(self.spell.get_stat('damage',base=8), Tags.Holy, self)
+			return
+		if not are_hostile(evt.source.owner, evt.unit):
+			self.owner.kill(trigger_death_event=False)
+
+def CompassionAngel(spell=None):
+	unit = Unit()
+	unit.max_hp = 80
+	unit.name = "Angel of Compassion"
+	unit.asset = ["TcrsCustomModpack", "Units", "angel_of_compassion"]
+	
+	unit.tags = [Tags.Holy]
+	unit.resists[Tags.Holy] = 100
+	unit.resists[Tags.Dark] = -100
+	unit.flying = True
+
+	unit.spells.append(SimpleMeleeAttack(damage=35,buff=Stun,buff_duration=1,damage_type=Tags.Holy,trample=True))
+	unit.buffs.append(ReincarnationBuff(5))
+	unit.buffs.append(IronAngelCompassion(spell))
+	return unit
+
+
+class AngelPietyEffect(Buff):
+	def on_init(self):
+		self.name = "Pious"
+		self.description = "Gains a reincarnation when taking any [holy] damage, if it does not already have one."
+		self.color = Tags.Physical.color
+		self.owner_triggers[EventOnDamaged] = self.on_damage
+
+	def on_damage(self, evt):
+		if evt.damage_type != Tags.Holy:
+			return
+		if self.owner.has_buff(ReincarnationBuff):
+			return
+		self.owner.apply_buff(ReincarnationBuff(1))
+
+def PiousAngel(spell=None):
+	unit = Unit()
+	unit.max_hp = 65
+	unit.name = "Angel of Piety"
+	unit.asset = ["TcrsCustomModpack", "Units", "angel_of_compassion"]
+	
+	unit.tags = [Tags.Holy]
+	unit.resists[Tags.Dark] = -100
+	unit.flying = True
+
+	unit.spells.append(SimpleRangedAttack(name="Holy Beam", damage=5, damage_type=Tags.Holy, range=10,beam=True))
+	unit.buffs.append(AngelPietyEffect())
+	return unit
+
+class ExplosiveBarrelTrigger(Buff):
+	def on_init(self):
+		self.name = "Volatile"
+		self.description = "Explodes upon taking any [fire] damage, dealing 300 [fire] damage in a 10 tile burst."
+		self.color = Tags.Physical.color
+		self.owner_triggers[EventOnDamaged] = self.on_damage
+
+	def on_damage(self, evt):
+		if evt.damage_type != Tags.Fire:
+			return
+		tiles = Burst(self.owner.level, Point(self.owner.x, self.owner.y), 10)
+		for stage in tiles:
+			for t in stage:
+				self.owner.level.deal_damage(t.x, t.y, 300, Tags.Fire, self)
+		self.owner.kill()
+
+def Barrel_unit():
+	unit = Unit()
+	unit.name = "Explosive Barrel"
+	unit.asset = ["TcrsCustomModpack", "Units", "barrel_unit"]
+	unit.max_hp = 250
+	unit.tags = [Tags.Fire, Tags.Construct]
+	unit.resists[Tags.Fire] = -100
+	unit.resists[Tags.Holy]
+	unit.stationary = True
+	unit.buffs.append(ExplosiveBarrelTrigger())
+	return unit
+
+class PorcelainBullEffect(Buff):
+	def on_init(self):
+		self.name = "Fragile"
+		self.description = "Dies instantly when taking any [physical] or [ice] damage."
+		self.color = Tags.Glass.color
+		self.owner_triggers[EventOnDamaged] = self.on_damage
+
+	def on_damage(self, evt):
+		if evt.damage_type == Tags.Physical or evt.damage_type == Tags.Ice:
+			self.owner.level.show_effect(self.owner.x, self.owner.y, Tags.Glassification)
+			self.owner.kill()
+
+def PorcelainBull(spell=None):
+	unit = Unit()
+	unit.max_hp = 150
+	unit.name = "Porcelain Bull"
+	unit.asset = ["TcrsCustomModpack", "Units", "porcelain_bull"]
+	
+	unit.tags = [Tags.Construct, Tags.Glass, Tags.Holy]
+	unit.resists[Tags.Physical] = -100
+	unit.resists[Tags.Ice] = -100
+
+	unit.spells.append(SimpleMeleeAttack(damage=8, trample=True))
+	unit.spells.append(LeapAttack(damage=12, damage_type=Tags.Physical, range=10, is_leap=False))
+	unit.buffs.append(PorcelainBullEffect())
+	return unit
+
+
+def Dustbiter():
+	unit = Unit()
+	unit.max_hp = 9
+	unit.name = "Dustbiter"
+	unit.asset = ["TcrsCustomModpack", "Units", "dustbiter"]
+	
+	unit.tags = [Tags.Elemental, Tags.Dark, Tags.Ice]
+	unit.resists[Tags.Physical] = 100
+	unit.resists[Tags.Dark] = 100
+	unit.resists[Tags.Ice] = 100
+	unit.resists[Tags.Holy] = -100
+	unit.resists[Tags.Fire] = -100
+	unit.resists[Tags.Lightning] = -100
+
+	unit.spells.append(SimpleMeleeAttack(damage=1))
+	unit.buffs.append(DeathExplosion(damage=5, radius=4, damage_type=Tags.Ice))
+	unit.buffs.append(DeathExplosion(damage=15, radius=2, damage_type=Tags.Dark))
+	unit.buffs.append(ReincarnationBuff(5))
+	return unit
+
+
+class GoblinRookRock(Spell):
+	def on_init(self):
+		self.name = "Throw Rock"
+		self.description = "Can only target enemies in the same row or column, in line of sight."
+		self.range = 50
+		self.damage = 20
+		self.damage_type = Tags.Physical
+
+	def get_ai_target(self):
+		units = []
+		for u in self.owner.level.get_units_in_los(self.caster):
+			if are_hostile(self.owner, u):
+				if u.x == self.caster.x or u.y == self.caster.y:
+					units.append(u)
+		if units == []:
+			return None
+		return random.choice(units)
+
+	def cast_instant(self, x, y):
+		origin_point = Point(self.caster.x, self.caster.y)
+		target_point = Point(x, y)
+		self.caster.level.deal_damage(x, y, self.get_stat('damage'), self.damage_type, self)
+		for point in self.caster.level.get_points_in_line(origin_point, target_point):
+			self.caster.level.projectile_effect(point.x, point.y, proj_name='physical_ball', proj_origin=origin_point, proj_dest=target_point)
+
+def GoblinRook():
+	unit = Unit()
+	unit.max_hp = 30
+	unit.name = "Goblin Tower"
+	unit.asset = ["TcrsCustomModpack", "Units", "goblin_rook"]
+	unit.tags = [Tags.Construct]
+	unit.stationary = True
+
+	unit.spells.append(GoblinRookRock())
+	unit.buffs.append(SpawnOnDeath(Goblin,1))
+	return unit
+
+def GoblinBishop():
+	unit = Unit()
+	unit.max_hp = 30
+	unit.name = "Goblin Vicar"
+	unit.asset = ["TcrsCustomModpack", "Units", "goblin_rook"]
+	unit.tags = [Tags.Construct]
+	unit.stationary = True
+
+	unit.buffs.append(SpawnOnDeath(Goblin,1))
+	return unit
+
+
+def Candlehead():
+	unit = Unit()
+	unit.max_hp = 25
+	unit.name = "Candlehead"
+	unit.asset = ["TcrsCustomModpack", "Units", "candlehead_med"]
+	unit.tags = [Tags.Construct, Tags.Arcane, Tags.Fire]
+	unit.resists[Tags.Arcane] = 75
+	unit.resists[Tags.Fire] = 75
+	unit.stationary = True
+
+	unit.spells.append(SimpleRangedAttack(damage=3, range=14, damage_type=Tags.Fire))
+	unit.buffs.append(RespawnAs(Candlehead_Weak))
+	return unit
+
+def Candlehead_Weak():
+	unit = Unit()
+	unit.max_hp = 25
+	unit.name = "Candlehead Melter"
+	unit.asset = ["TcrsCustomModpack", "Units", "candlehead_small"]
+	unit.tags = [Tags.Construct, Tags.Arcane, Tags.Fire]
+	unit.resists[Tags.Arcane] = 75
+	unit.resists[Tags.Fire] = 75
+	unit.stationary = True
+
+	unit.spells.append(SimpleRangedAttack(damage=2, range=7, damage_type=Tags.Fire))
+	unit.buffs.append(RespawnAs(VoidBomber))
+	return unit
+
+
+class AbhorrentSlimeDebuff(Buff):
+	def on_init(self):
+		self.description = "50%% chance to lose 10 max hp each turn.\nSpawns a new abhorrent slime with 10 less max hp upon death."
+		self.color = Tags.Slime.color
+		self.owner_triggers[EventOnDeath] = self.on_death
+
+	def on_advance(self):
+		if random.random() >= 0.50:
+			if self.owner.cur_hp > 10:
+				self.owner.max_hp -= 10
+				self.owner.cur_hp -= 10
+			else:
+				self.owner.level.show_effect(self.owner.x, self.owner.y, Tags.Slime)
+				self.owner.kill(trigger_death_event=False)
+
+	def summon_new_slime(self):
+		unit = AbhorrentSlime(self.owner.max_hp-10)
+		self.summon(unit)
+		yield
+
+	def on_death(self, evt):
+		self.owner.level.queue_spell(self.summon_new_slime())
+
+def AbhorrentSlime(hp=200):
+	unit = Unit()
+	unit.max_hp = hp
+	unit.name = "Abhorrent Slime"
+	unit.asset = ["TcrsCustomModpack", "Units", "abhorrent_slime"]
+	unit.tags = [Tags.Slime, Tags.Chaos]
+	unit.resists[Tags.Physical] = 75
+	unit.resists[Tags.Fire] = 75
+	unit.resists[Tags.Lightning] = 75
+
+	unit.spells.append(SimpleRangedAttack(name="Chaos Sludge", damage=3, range=3, damage_type=[Tags.Fire, Tags.Lightning, Tags.Physical]) )
+	unit.buffs.append(AbhorrentSlimeDebuff())
+	return unit
+
+
+def Cephalophore():
+	unit = Unit()
+	unit.max_hp = 113
+	unit.name = "Cephalophore"
+	unit.asset = ["TcrsCustomModpack", "Units", "cephalophore"]
+	unit.tags = [Tags.Demon, Tags.Undead, Tags.Dark]
+
+	unit.buffs.append(DamageAuraBuff(damage=5, damage_type=[Tags.Physical, Tags.Dark], radius=2))
+	return unit
+
+
+class SpawnJians(Buff):
+	def on_init(self):
+		self.description = "On death spawn 2 Jian at random locations"
+		self.buff_type = BUFF_TYPE_PASSIVE
+		self.owner_triggers[EventOnDeath] = self.on_death
+
+	def get_tooltip(self):
+		return self.description
+
+	def on_death(self, evt):
+		self.owner.level.queue_spell(self.spawn())
+
+	def spawn(self):
+		respawn_points = [p for p in self.owner.level.iter_tiles() if self.owner.level.can_stand(p.x, p.y, self.owner)]
+		if len(respawn_points) <= 1:
+			return
+		random.shuffle(respawn_points)
+		
+		p1 = respawn_points.pop()
+		p2 = respawn_points.pop()
+		unit = Jian()
+		self.summon(unit, p1)
+		unit = Jian()
+		self.summon(unit, p2)
+
+		for p in self.owner.level.get_points_in_line(Point(self.owner.x, self.owner.y),p2)[1:]:
+			self.owner.level.show_effect(p.x, p.y, Tags.Dark, minor=True)
+		for p in self.owner.level.get_points_in_line(Point(self.owner.x, self.owner.y),p1)[1:]:
+			self.owner.level.show_effect(p.x, p.y, Tags.Dark, minor=True)
+
+		yield
+
+
+class FindHalf(Spell): ## Modifiers siege golem wander
+	def on_init(self):
+		self.range = 50
+		self.name = "Return"
+		self.description = "Seeks out the nearest jian"
+		self.requires_los = False
+
+	def can_threaten(self, x, y):
+		return False
+
+	def get_ai_target(self):
+		potentials = [u for u in self.caster.level.units if not are_hostile(u, self.caster) and u.name == self.caster.name and u != self.caster]
+		potentials = [u for u in potentials if self.can_cast(u.x, u.y)]
+		if not potentials:
+			return None
+
+		potentials.sort(key = lambda u: distance(u, self.caster))
+
+		target = potentials[0]
+		return target
+
+
+	def cast_instant(self, x, y):
+		target = self.get_ai_target()
+		path = self.caster.level.find_path(self.caster, target, self.caster, pythonize=True)
+		if not path:
+			return
+
+		p = path[0]
+		if self.caster.level.can_move(self.caster, p.x, p.y):
+			self.caster.level.act_move(self.caster, p.x, p.y)
+		if len(path) < 2:
+			unit = Jianjian()
+			self.summon(unit, target=self.caster)
+			self.caster.kill()
+			bird = self.caster.level.get_unit_at(p.x, p.y)
+			bird.kill()
+
+
+def Jian():
+	unit = Unit()
+	unit.max_hp = 40
+	unit.name = "Jian"
+	unit.asset = ["TcrsCustomModpack", "Units", "jian"]
+	unit.tags = [Tags.Living, Tags.Holy]
+	unit.flying = True
+	unit.spells.append(SimpleMeleeAttack(damage=8, damage_type=Tags.Physical))
+	unit.spells.append(FindHalf())
+	return unit
+
+def Jianjian():
+	unit = Unit()
+	unit.max_hp = 80
+	unit.name = "Jianjian"
+	unit.asset = ["TcrsCustomModpack", "Units", "jianjian"]
+	unit.tags = [Tags.Living, Tags.Holy]
+	unit.flying = True
+	unit.spells.append(SimpleMeleeAttack(damage=8, damage_type=Tags.Physical, attacks=2))
+	unit.buffs.append(SpawnJians())
+	return unit
+
 DIFF_EASY = 1
 DIFF_MED = 2
 DIFF_HARD = 3
+
 
 import os
 filename = os.path.join(os.getcwd(), 'mods','TcrsCustomModpack', 'config.txt')
 with open(filename, 'r') as config:
 	line = config.readline()
-	if line.lower() == "spawn_monsters = true":
-		spawn_options.extend( [ (Fishman, 2), (IceShambler_Med, 3), (SlimePriest, 3), (ChaosBeast, 4), (Riftstalker, 4), (SandElemental, 4), (FishmanArcher, 4), (FishmanCat, 4), (FishmanLion, 4), (IceShambler_Big, 5), (SeaSerpent_Unit, 5) ] )
-		spawn_options.extend( [ (ShieldKnight, 6), (ChaosWyrm, 7), (SpiderDragon, 7), (VoidWyrm, 7), (GoldWyrm, 7), (ChiroDragon, 7), (GalvanizedHorror, 9) ] )
-		new_spawns_rare = [ (Hydra, DIFF_EASY, 2, 3, None), (GristMage, DIFF_EASY, 1, 1, None), (Tachi, DIFF_EASY, 2, 5, None), (Berserker, DIFF_EASY, 5, 7, None) ]
+	if line.lower() == "spawn_monsters = true": ## Not how you should check this.
+		spawn_options.extend( [ (Fishman, 2), (IceShambler_Med, 3), (SlimePriest, 3), (FishmanLion, 3), (SkullWorm, 4), (ChaosBeast, 4), (Riftstalker, 4), (SandElemental, 4), (RecycloneUnit, 4), (FishmanArcher, 4), (FishmanCat, 4) ] )
+		spawn_options.extend( [ (IceShambler_Big, 5), (SeaSerpent_Unit, 5), (CowardlyLion, 5), (SilverGorgon, 5) ] )
+		spawn_options.extend( [ (ShieldKnight, 6), (GiantToadGhost, 6), (ChaosWyrm, 7), (SpiderDragon, 7), (VoidWyrm, 7), (GoldWyrm, 7), (ChiroDragon, 7), (GalvanizedHorror, 9) ] )
+		new_spawns_rare = [ (Hydra, DIFF_EASY, 2, 3, None), (GristMage, DIFF_EASY, 1, 1, None), (Tachi, DIFF_EASY, 2, 5, None), (Berserker, DIFF_EASY, 5, 7, None), (BookWyrm, DIFF_MED, 1, 1, None) , (CompassionAngel, DIFF_HARD, 1, 1, None) ]

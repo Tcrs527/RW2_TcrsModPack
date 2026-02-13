@@ -10,4 +10,8 @@ If the folder has been renamed e.g. TcrsCustomModpack-main, rename the folder to
 
 Launch Rift Wizard 2. The command prompt (if enabled) will note any loaded content. If successful it will say TCRS's Custom Modpack Loaded. You can also open the spellbook to see if any new spells are there.
 
-You must abandon any previous runs after installing this modpack, because they will not load properly.  
+You must abandon any previous runs after installing this modpack, because they will not load properly. 
+
+
+The Config file allows you to spawn monsters from the mod as enemies. It defaults to disabled.
+Change "spawn_monsters = False" to "spawn_monsters = True"  

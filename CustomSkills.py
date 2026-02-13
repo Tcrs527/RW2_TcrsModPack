@@ -649,17 +649,6 @@ class HolyMetalLantern(Upgrade):
 		if Tags.Holy in evt.spell.tags or Tags.Metallic in evt.spell.tags:
 			self.owner.apply_buff(PuregleamBuff(self), evt.spell.level)
 
-def EyeKnight():
-	unit = Unit()
-	unit.name = "Eye Knight"
-	unit.asset =  ["TcrsCustomModpack", "Units", "eye_knight"]
-	unit.max_hp = 25
-	unit.resists[Tags.Dark] = 100
-
-	unit.spells.append(SimpleMeleeAttack(damage=11, damage_type=Tags.Dark))
-	unit.tags = [Tags.Dark, Tags.Eye, Tags.Demon]
-
-	return unit
 
 class NightsightBuff(Buff):
 	def __init__(self, skill):
@@ -670,15 +659,16 @@ class NightsightBuff(Buff):
 	def on_init(self):
 		self.buff_type = BUFF_TYPE_BLESS
 		self.stack_type = STACK_DURATION
-		self.color = Tags.Eye.color
+		self.health_bonus = self.skill.get_stat('minion_health') // 4
+		self.dmg_bonus = self.skill.get_stat('minion_damage') // 4
 		self.name = "Nightsight"
-		self.dtypes = [Tags.Eye, Tags.Dark]
+		self.description = "Every %d turns gain %d max health and %d damage to its melee spells" % (self.health_bonus, self.health_bonus, self.dmg_bonus)
 		self.count = self.skill.get_stat('shot_cooldown')
 
 	def make_knight(self):
-		self.knight = EyeKnight()
-		apply_minion_bonuses(self.skill, self.knight)
-		self.summon(self.knight)
+		unit =  self.skill.make_unit()
+		self.knight = unit
+		self.owner.level.summon(self.owner, unit, Point(self.owner.x, self.owner.y))
 
 	def on_applied(self, owner):
 		if self.knight == None:
@@ -695,10 +685,16 @@ class NightsightBuff(Buff):
 			self.count -= 1
 			if self.count <= 0:
 				self.count = self.skill.get_stat('shot_cooldown')
-				self.knight.max_hp += self.skill.get_stat('minion_health') // 4
-				self.knight.cur_hp += self.skill.get_stat('minion_health') // 4
-				melee = [s for s in self.knight.spells if s.name == "Melee Attack"][0]
-				melee.damage += self.skill.get_stat('minion_damage') // 4
+				n = 1
+				if self.owner.level.can_see(self.owner.x, self.owner.y, self.knight.x, self.knight.y):
+					n = 2
+				for i in range(n):
+					self.knight.max_hp += self.health_bonus
+					self.knight.cur_hp += self.health_bonus
+					melee = [s for s in self.knight.spells if s.name == "Melee Attack"][0]
+					melee.damage += self.dmg_bonus
+				for p in self.owner.level.get_points_in_line( Point(self.owner.x, self.owner.y), Point(self.knight.x, self.knight.y) )[1:]:
+					self.owner.level.show_effect(p.x, p.y, Tags.Dark, minor=True)
 
 class NightsightLantern(Upgrade):
 	def on_init(self):
@@ -707,8 +703,8 @@ class NightsightLantern(Upgrade):
 		self.asset = ["TcrsCustomModpack", "Icons", "nightsight_lantern"]
 		self.level = 5
 
-		self.minion_health = 60
-		self.minion_damage = 16
+		self.minion_health = 52
+		self.minion_damage = 8
 		self.shot_cooldown = 3
 
 		self.owner_triggers[EventOnSpellCast] = self.on_spell_cast
@@ -716,12 +712,17 @@ class NightsightLantern(Upgrade):
 
 	def get_description(self):
 		return ("Whenever you cast a [dark] or [eye] spell, gain Nightsight with duration equal to the spell's level. Eye spells give 4 times their level. \n"
-				"While you have Nightsight summon an eyeknight.\nEyeknights have [{minion_health}_max_hp:minion_health] and a [{minion_damage}_dark:dark] damage melee attack.\n"
+				"While you have Nightsight summon an eyeknight. Eyeknights have [{minion_health}_max_hp:minion_health] and a [{minion_damage}_dark:dark] damage melee attack.\n"
 				"When you cast an Eye enchantment, the eyeknight also casts it.\n"
-			    "Each [3:duration] turns, decreasing with shot cooldown, the eyeknight gains 25% its base max hp and melee damage.\n").format(**self.fmt_dict())
+				"Each [3:duration] turns, decreasing with shot cooldown, the eyeknight gains 25% its base max hp and melee damage, which doubles if in line of sight of the wizard.\n").format(**self.fmt_dict())
 	
 	def get_extra_examine_tooltips(self):
-		return [EyeKnight()]
+		return [EyeKnight(self)]
+
+	def make_unit(self):
+		unit = EyeKnight(self)
+		apply_minion_bonuses(self, unit)
+		return unit
 
 	def on_death(self, evt):
 		buff = self.owner.get_buff(NightsightBuff)
@@ -1020,7 +1021,8 @@ class Scrapheap(Upgrade):
 		self.counter = 0
 		self.minion_health = 21
 		self.minion_damage = 9
-		
+		self.minion_duration = 42
+
 	def on_death(self, evt):
 		if not (Tags.Construct in evt.unit.tags or Tags.Metallic in evt.unit.tags):
 			return
@@ -1046,6 +1048,7 @@ class Scrapheap(Upgrade):
 	def get_extra_examine_tooltips(self):
 		return [Golem()]
 
+
 class ArclightEagle(Upgrade):
 	def on_init(self):
 		self.name = "Arclight Eagle" ##Obviously inspired by Arclight Phoenix
@@ -1070,6 +1073,7 @@ class ArclightEagle(Upgrade):
 			self.summon(eagle)
 		self.spells_cast = 0
 		self.lightning = False
+
 
 class Arithmetic(Buff):
 	def __init__(self, skill):
@@ -1157,7 +1161,7 @@ class QueenOfTorment(Upgrade):
 			target = random.choice(candidates)
 			duration = self.get_stat('duration')
 			if evt.damage_event.damage_type == Tags.Ice:
-				buff = Fear()
+				buff = FearBuff()
 			elif evt.damage_event.damage_type == Tags.Poison:
 				buff = FrozenBuff()
 				duration += 2
@@ -2052,20 +2056,7 @@ class Overkill(Upgrade):
 			targets[0].deal_damage((evt.damage), evt.damage_type, self)
 
 
-def RecycloneUnit():
-	unit = Unit()
-	unit.name = "Recyclone"
-	unit.asset = ["TcrsCustomModpack", "Units", "recyclone2"]
-	unit.max_hp = 40
 
-	unit.spells.append(LeapAttack(damage=8, range=4))
-
-	unit.flying = True
-	unit.tags = [Tags.Construct, Tags.Nature, Tags.Metallic]
-	unit.resists[Tags.Poison] = 100
-	unit.resists[Tags.Physical] = 50
-
-	return unit
 
 class Recyclone(Upgrade):
 	def on_init(self):
@@ -2096,7 +2087,7 @@ class Recyclone(Upgrade):
 		self.summon_cyclone()
 
 	def summon_cyclone(self):
-		cyclone = RecycloneUnit()
+		cyclone = RecycloneUnit(self)
 		cyclone.max_hp = self.get_stat('minion_health')
 		cyclone.spells[0].damage = self.get_stat('minion_damage')
 		cyclone.spells[0].range = self.get_stat('minion_range')
@@ -2773,17 +2764,6 @@ class Basics(Upgrade):
 		self.tag_bonuses[Tags.Sorcery]['damage'] += 1
 		self.owner.tag_bonuses[Tags.Sorcery]['damage'] += 1
 
-
-def SilverGorgon():
-	unit = GreenGorgon()
-	unit.asset = ["TcrsCustomModpack", "Units", "silver_gorgon"]
-	breath = ShrapnelBreath()
-	breath.cool_down = 3
-	breath.damage = 8
-	melee = SimpleMeleeAttack(damage=8, damage_type=Tags.Holy)
-	unit.spells = [breath, melee]
-	unit.tags = [Tags.Holy, Tags.Metallic, Tags.Living]
-	return unit
 
 class SilverGorgonFamiliar(Upgrade): ##Obviously modified familiar code
 	def on_init(self):
