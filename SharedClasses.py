@@ -1,7 +1,3 @@
-from pydoc import describe
-from threading import main_thread
-
-
 import Spells
 import BossSpawns
 import copy
@@ -13,7 +9,6 @@ from CommonContent import *
 print("General Content Loaded")
 
 ##Testing new tag changes, will require changing reverse_tag_key() in RiftWizard2.py TODO
-
 water_tag = Tag("Water", Color(14,14,250)) ##Purely for cross-mod compatibility
 
 ##--------------------Tag Things--------------------
@@ -341,8 +336,7 @@ class Sandstorm(Cloud):
 			unit.apply_buff(BlindBuff(), self.buff_duration)
 		self.level.deal_damage(self.x, self.y, self.damage, Tags.Physical, self.source)
 
-class Hole(Cloud):
-
+class Hole(Cloud): ##These just look ugly, so they have been mostly forgotten
 	def __init__(self):
 		Cloud.__init__(self)
 		self.name = "Hole"
@@ -464,6 +458,7 @@ def Hydra():
 	unit.resists[Tags.Ice] = -50
 	unit.tags = [Tags.Living, Tags.Nature]
 
+	unit.buffs.append(RegenBuff(8))
 	unit.buffs.append(SpawnOnDeath(TwoHeadedSnake, 4))
 	return unit
 
@@ -743,7 +738,7 @@ class ChaosBeastSpawner(Buff):
 		self.owner_triggers[EventOnDeath] = self.on_death
 		
 	def get_tooltip(self):
-		return "Summons snakes upon death, increasing by 1 for every 9 max hp."
+		return "Summons 1 snake upon death for every 9 max hp it has."
 
 	def on_death(self, evt):
 		hp = self.owner.max_hp
@@ -859,7 +854,7 @@ class RecycloneClone(Buff):
 		self.name = "Recyclone Cloning"
 		self.buff_type = BUFF_TYPE_BLESS
 		self.color = Tags.Nature.color
-		self.description = "Makes a new recyclone everytime the wizard uses an item."
+		self.description = "Creates a new recyclone whenever the wizard uses an item."
 		self.stack_type = STACK_NONE
 		
 		self.global_triggers[EventOnItemUsed] = self.on_item
@@ -1226,7 +1221,8 @@ def SkullWorm():
 
 	unit.spells.append(SimpleMeleeAttack(12))
 
-	unit.resists[Tags.Dark] = 100
+	unit.resists[Tags.Poison] = 75
+	unit.resists[Tags.Dark] = 75
 	unit.resists[Tags.Ice] = -100
 
 	unit.burrowing = True
@@ -1714,7 +1710,7 @@ class IronAngelCompassion(Buff):
 				
 	def on_init(self):
 		self.name = "Pure Compassion"
-		self.description = "Whenever another ally hurts an ally, despawn."
+		self.description = "Whenever an ally hurts a different ally, this unit despawns."
 		self.color = Tags.Holy.color
 		self.global_triggers[EventOnDamaged] = self.on_damage
 
@@ -1777,6 +1773,7 @@ def PiousAngel(spell=None):
 	unit.asset = ["TcrsCustomModpack", "Units", "angel_of_compassion"]
 	
 	unit.tags = [Tags.Holy]
+	unit.resists[Tags.Holy] = 50
 	unit.resists[Tags.Dark] = -100
 	unit.flying = True
 
@@ -2081,18 +2078,3 @@ def Jianjian():
 	unit.spells.append(SimpleMeleeAttack(damage=8, damage_type=Tags.Physical, attacks=2))
 	unit.buffs.append(SpawnJians())
 	return unit
-
-DIFF_EASY = 1
-DIFF_MED = 2
-DIFF_HARD = 3
-
-
-import os
-filename = os.path.join(os.getcwd(), 'mods','TcrsCustomModpack', 'config.txt')
-with open(filename, 'r') as config:
-	line = config.readline()
-	if line.lower() == "spawn_monsters = true": ## Not how you should check this.
-		spawn_options.extend( [ (Fishman, 2), (IceShambler_Med, 3), (SlimePriest, 3), (FishmanLion, 3), (SkullWorm, 4), (ChaosBeast, 4), (Riftstalker, 4), (SandElemental, 4), (RecycloneUnit, 4), (FishmanArcher, 4), (FishmanCat, 4) ] )
-		spawn_options.extend( [ (IceShambler_Big, 5), (SeaSerpent_Unit, 5), (CowardlyLion, 5), (SilverGorgon, 5) ] )
-		spawn_options.extend( [ (ShieldKnight, 6), (GiantToadGhost, 6), (ChaosWyrm, 7), (SpiderDragon, 7), (VoidWyrm, 7), (GoldWyrm, 7), (ChiroDragon, 7), (GalvanizedHorror, 9) ] )
-		new_spawns_rare = [ (Hydra, DIFF_EASY, 2, 3, None), (GristMage, DIFF_EASY, 1, 1, None), (Tachi, DIFF_EASY, 2, 5, None), (Berserker, DIFF_EASY, 5, 7, None), (BookWyrm, DIFF_MED, 1, 1, None) , (CompassionAngel, DIFF_HARD, 1, 1, None) ]

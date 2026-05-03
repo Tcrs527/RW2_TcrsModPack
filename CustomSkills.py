@@ -9,7 +9,6 @@ from Level import *
 from Monsters import *
 from RareMonsters import BatDragon
 import math
-import copy
 
 from mods.TcrsCustomModpack.SharedClasses import *
 from mods.TcrsCustomModpack.CustomSpells import MetalShard, Improvise, AstraVirtue, OpalescentEyeBuff, SeaSerpent, SeaWyrmBreath, SummonEyedra, ShrapnelBreath, SteelFangs, SummonBookwyrm, ScrollBreath, AvatarOfTiamat, TiamatBreath
@@ -1686,6 +1685,7 @@ class VoidCaller(Upgrade):
 		
 		self.minion_health = 75
 		self.minion_damage = 14
+		self.minion_duration = 25
 		#self.breath_damage = 9 #Commented out in case breath damage returns
 		
 	def get_extra_examine_tooltips(self):
@@ -1694,7 +1694,8 @@ class VoidCaller(Upgrade):
 	def get_description(self):
 		return ("For every 15 wall tiles turned into floor tiles, summon a Void Wyrm.\n"
 				"For every 200 damage dealt by Arcane Minions, summon a Gold Wyrm.\n"
-				"Walls Destroyed: %d\nDamage dealt: %d\n" % (self.wall_count, self.counter) )
+				"Each wyrm lasts for [{minion_duration}_turns:minion_duration].\n"
+				"Walls Destroyed: %d\nDamage dealt: %d\n" % (self.wall_count, self.counter) ).format(**self.fmt_dict())
 
 	def make_wyrm(self, void):
 		if void:
@@ -1824,7 +1825,7 @@ class TheFirstSeal(Upgrade):
 	def on_init(self):
 		self.name = "The First Seal"
 		self.tags = [Tags.Holy, Tags.Chaos, Tags.Conjuration]
-		self.level = 5
+		self.level = 6
 		self.asset = ["TcrsCustomModpack", "Icons", "thefirstseal"]
 
 		self.minion_health = 66
@@ -1836,7 +1837,7 @@ class TheFirstSeal(Upgrade):
 		self.unit_count = 0
 		
 	def get_description(self):
-		return ("For every 6 [Holy] spells you cast, summon a warlock for 16 turns.\n"
+		return ("For every 6 [Holy] spells you cast, summon a warlock for 36 turns.\n"
 				"For every 66 [Chaos] or [Demon] units that are summoned, summon a white rider.").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
@@ -3328,20 +3329,20 @@ class OrbRevive(ReincarnationBuff):
 		self.owner.level.queue_spell(self.respawn())
 
 	def respawn(self):
-		#self.owner.killed = False
 		dest = Point(self.orb.x, self.orb.y)
 		mastery = self.wizard.get_mastery(Tags.Lightning) + self.wizard.get_mastery(Tags.Orb) + self.wizard.get_mastery(Tags.Blood)
 		self.owner.max_hp = mastery
 		self.owner.cur_hp = mastery
 		self.orb.kill()
-		self.owner.level.act_move(self.owner, dest.x, dest.y, teleport=True)
-		self.owner.level.leap_effect(self.old_pos.x, self.old_pos.y, Tags.Holy.color, self.owner)
-		yield
+		if self.owner.level.can_move(self.owner, dest.x, dest.y, teleport=True):
+			self.owner.level.act_move(self.owner, dest.x, dest.y, teleport=True)
+			self.owner.level.leap_effect(self.old_pos.x, self.old_pos.y, Tags.Holy.color, self.owner)
 		for p in self.owner.level.get_points_in_line(self.old_pos, dest)[1:-1]:
 			self.owner.level.show_effect(p.x, p.y, Tags.Holy, minor=True)
 		self.owner.remove_buff(self)
 		self.owner.level.leap_effect(dest.x, dest.y, Tags.Holy.color, self.owner)
 		yield
+
 
 
 class ReanimationOrb(Upgrade):
@@ -3354,15 +3355,15 @@ class ReanimationOrb(Upgrade):
 
 	def get_description(self):
 		return ("Begin each realm with the reanimation orb, an orb immune to all damage types.\n"
-				"On any realm if you take fatal damage, you instead replace the orb, taking its position and setting your max and current hp are set to the total SP spent on [lightning], [orb], and [blood] magic.\n"
+				"On any realm if you take fatal damage, you swap positions with the orb, if possible, and set your max and current hp to your total SP spent on [lightning], [orb], and [blood] magic.\n"
 				"The orb is stationary and has 1 hp.").format(**self.fmt_dict())
 
 	def get_extra_examine_tooltips(self):
 		return [self.make_orb()]
 
-	def make_orb(self): ##TODO orb can't have flying, or wizard's teleport needs to account for flying
+	def make_orb(self):
 		orb = ProjectileUnit()
-		orb.name = "Chaos Orb"
+		orb.name = "Reanimation Orb"
 		orb.asset =  ["TcrsCustomModpack", "Units", "reanimation_orb"]
 		orb.stationary = True
 		orb.tags = [Tags.Lightning, Tags.Blood]
@@ -3370,7 +3371,7 @@ class ReanimationOrb(Upgrade):
 
 	def enter_realm(self, evt):
 		orb = self.make_orb()
-		orb.max_hp = 1
+		orb.max_hp = self.owner.get_mastery(Tags.Lightning) + self.owner.get_mastery(Tags.Orb) + self.owner.get_mastery(Tags.Blood)
 		self.owner.level.summon(self.owner, orb, Point(self.owner.x, self.owner.y))
 		self.owner.apply_buff(OrbRevive(self.owner, orb))
 

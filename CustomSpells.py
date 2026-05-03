@@ -10,9 +10,7 @@ import Equipment as Equip
 from Game import *
 from Level import *
 from Monsters import *
-from copy import copy, deepcopy
 import math
-import itertools
 import BossSpawns
 
 
@@ -72,7 +70,7 @@ class Improvise(Spell):
 		u = self.caster.level.get_unit_at(x, y)
 		self.caster.level.deal_damage(x, y, self.get_stat('damage'), d_type, self)
 		if u != None:
-			if self.get_stat('promote') and self.cur_charges >= 7 and u.name[-4:] == " Imp": ##This only works if the unit is named 'foo Imp', should avoid imp gates at least.
+			if self.get_stat('promote') and self.cur_charges >= 7 and u.name[-4:] == " Imp": ##This only works if the unit is named 'foo Imp', should avoid imp gates at least, but it won't work on liches.
 				self.cur_charges -= 7
 				u.kill()
 				unit = random.choice([IronFiend(),RedFiend(),YellowFiend()])
@@ -153,7 +151,6 @@ class MetalShard(Spell):
 		
 		self.echocast = False
 
-		#Kinetic Cascade - Credit Mikhailo Kobiletski
 		self.upgrades['echo'] = (1, 2, "Echoing Bounce", "When you cast metal shard, your next level 2 or higher spell also casts metal shard at the target.\nIf there is an ally in the tile, instead cast metal shard at a random enemy in range.")
 		self.upgrades['bouncer'] = (1, 4, "Anti-Inelastic Slime", "Each time it ricochets it gains 100% damage.\n"
 																"If the wizard cast the spell, at the last unit hit, summon a green slime with the max hp of the total damage dealt, for 10 turns.", [Tags.Slime])
@@ -517,7 +514,7 @@ class FlyWheel(Spell):
 		return [BagOfBugs(), FlyCloud(), self.spell_upgrades[0], BagOfBugsBrain(), BrainFlies(), self.spell_upgrades[1], giantbagfix, self.spell_upgrades[2]]
 
 	def get_description(self):
-		return ("Summon [{num_summons}:num_summons] Bags of Bugs in random tiles in a ring around the caster. "
+		return ("Summon [{num_summons}:num_summons] Bags of Bugs in random tiles in a [{radius}:radius] tile ring around the caster. "
 				"The Bags have [{minion_health}_HP:minion_health] and have a melee attack dealing [{minion_damage}_physical:physical] damage.\n"
 				"Every other tile in the ring is filled with Fly Swarms that last for [{minion_duration}_turns:minion_duration]. "
 				"Fly Swarms have 1/4th as much health and damage as the Bags of Bugs.").format(**self.fmt_dict())
@@ -1536,8 +1533,8 @@ class HolyBeam(Spell):
 
 	def get_description(self):
 		return ("Deal [{damage}_holy:holy] damage in a beam. Pierces but does not destroy walls. The beam loses damage as it deals damage.\n"
-				"Each unit strike subtracts the total damage dealt from the beam, and each wall passed subtracts 20 damage."
-				"The minimum damage of the beam is 5.").format(**self.fmt_dict())
+				"Each unit struck subtracts the total damage dealt from the beam, and each wall passed subtracts 20 damage."
+				"The minimum damage of the beam is 10.").format(**self.fmt_dict())
 
 	def get_impacted_tiles(self, x, y):
 		start = Point(self.caster.x, self.caster.y)
@@ -1573,8 +1570,8 @@ class HolyBeam(Spell):
 			else:
 				cur_damage -= self.caster.level.deal_damage(p.x, p.y, cur_damage, tag, self)
 				
-			if cur_damage <= 5:
-				cur_damage = 5
+			if cur_damage <= 10:
+				cur_damage = 10
 		return wall_count
 
 	def cast(self, x, y):
@@ -1704,16 +1701,15 @@ class MirrorShieldBuff(Buff):
 			self.owner.level.deal_damage(p.x, p.y, self.spell.get_stat('damage'), Tags.Arcane, self)
 		
 	def on_cast(self, evt):
-		if evt.caster == self.owner and distance(evt.caster, Point(evt.x, evt.y)) <= 1.5 and self.spell.get_stat('bash'):
-			if self.owner.x == evt.x and self.owner.y == evt.y:
-				return
-			else:
-				self.owner.level.deal_damage(evt.x, evt.y, self.damage_total * 2, Tags.Physical, self)
-				
-		if not are_hostile(evt.caster, self.owner):
+		if self.owner.x == evt.x and self.owner.y == evt.y:
+			if hasattr(evt.spell,'damage'):
+				self.damage_total += evt.spell.damage
 			return
-		if hasattr(evt.spell,'damage'):
-			self.damage_total += evt.spell.damage
+				
+		if evt.caster == self.owner and distance(evt.caster, Point(evt.x, evt.y)) <= 1.5 and self.spell.get_stat('bash'):
+			self.owner.level.deal_damage(evt.x, evt.y, self.damage_total * 2, Tags.Physical, self)
+
+
 
 class ShieldAbsorption(Upgrade):
 	def on_init(self):
@@ -1754,12 +1750,12 @@ class MirrorShield(Spell):
 		self.max_channel = 10
 
 		self.add_upgrade(ShieldAbsorption())
-		self.upgrades['bash'] = (1, 3, "Shield Bash", "If you cast a spell on an adjacent tile while you have the buff, deal [physical] damage to the tile equal to the buff's charges.")
+		self.upgrades['bash'] = (1, 3, "Shield Bash", "If you cast a spell on an adjacent tile while you have the buff, deal [physical] damage to the tile equal to twice the buff's charges.")
 		self.upgrades['retention'] = (1, 4, "Barrier", "Keep up to 3 shields when the buff is removed, and the buff grants 3 shields per turn instead of 2.")
 		
 	def get_description(self):
 		return ("Gain the Mirror Shield buff [{duration}_turns:duration] turns, and gain 1 turn if you channel.\n"
-				"The buff grants [2_shields:shields] each turn, and gets charges equal to the damage stat of spells that target you.\n"
+				"The buff grants [2_shields:shields] each turn, and gets charges equal to the damage stat of spells that target your tile (even your own).\n"
 				"When the buff is removed, you lose all shields and deal [{damage}_arcane:arcane] damage to enemies in a [{radius}_tile:radius] tile burst, gaining 1 radius for every 50 charges the buff had.").format(**self.fmt_dict())
 
 	def cast(self, x, y, channel_cast=False):
@@ -1795,7 +1791,7 @@ class Amalgamate(Spell): ## Implement some variation of this spell, after the ma
 		##Produces extremely powerful units but they can only take 1 action per turn, would likely decrease overall DPS (reevaluation with new upgrades, seems fun but may be too strong)
 		
 		self.max_charges = 4
-		self.minion_health = 10
+		self.minion_health = 20
 		self.range = 8
 		self.radius = 10
 		
@@ -1809,9 +1805,9 @@ class Amalgamate(Spell): ## Implement some variation of this spell, after the ma
 
 	def get_description(self):
 		return ("Amalgamates all [Living], [Nature], or [Undead] units in a 10 tile cross, killing any allies, and stealing [{minion_health}_max_hp:minion_health] from enemies.\n"
-				"Then spawn an Amalgamation at the target location, with the total max hp of allies, the stolen hp of enemies, and all of their tags and simple spells.\n"
-				"Simple spells are melee attacks, leaps, and most ranged attacks. Combines their damage stat, and uses the base ."
-				"The Amalgamation regenerates 10% of its base max hp each turn.").format(**self.fmt_dict())
+				"Then spawn an amalgamation at the target location, with the total max hp of allies, the stolen hp of enemies, and all of their tags and simple spells.\n"
+				"Simple spells are melee attacks, leaps, and most ranged attacks. Combines the damage attribute of each spell.\n"
+				"The amalgamation regenerates 10% of its base max hp each turn.").format(**self.fmt_dict())
 
 	def get_impacted_tiles(self, x, y):
 		rad = self.get_stat('radius')
@@ -2016,7 +2012,6 @@ class OccultBlast(Spell):
 
 
 class RingofFishmen(Spell):
-		
 	def on_init(self):
 		self.name = "Fishmen's Dance"
 		self.tags = [Tags.Dark, Tags.Conjuration]
@@ -5267,7 +5262,7 @@ class PrismaticSpray(Spell): ##Very clearly inspired by Jack Vance's Dying Earth
 		
 		self.add_upgrade(HarnessRainbow())
 		self.upgrades['cloak'] = (1, 2, "Alamer's Cloak", "Gain a random 2 damage aura which deals 2 of the damage types, has a radius of [5:radius], and last [25:duration] turns.", [Tags.Enchantment])
-		self.upgrades[('prismatic','duration')] = (1, 1, "The Kaleidoscopic Spray", "Blind every unit on the map for a [1:duration] turn upon casting.", [Tags.Holy])
+		self.upgrades[('prismatic','duration')] = (1, 1, "The Kaleidoscopic Spray", "Blind every unit on the map for [1:duration] turn(s) upon casting.", [Tags.Holy])
 
 	def get_description(self):
 		return ("This spell must be prepared after each cast, stunning you for 20 turns. Preparation lasts between realms.\n"
@@ -5480,8 +5475,8 @@ class VileMenagerie(Spell): ##Very clearly inspired by Jack Vance's Dying Earth
 
 	def get_description(self):
 		return ("This spell must be prepared after each cast, stunning you for 20 turns. Preparation lasts between realms.\n"
-				"Summon a random assortment of monsters that could be found in this realm.\n"
-				"Summons 18 monsters which last for 18 turns.").format(**self.fmt_dict())
+				"Summon a random assortment of monsters, choosing from monsters that can be generated at your realm level.\n"
+				"Summons [{num_summons}:num_summons] monsters which last for [{minion_duration}:minion_duration] turns.").format(**self.fmt_dict())
 
 	def get_impacted_tiles(self, x, y):
 		if self.prepared:
@@ -8223,7 +8218,7 @@ def trebuchet_wall(spell=None):
 	unit.tags = [Tags.Construct, Tags.Metallic]
 	return unit
 
-## TODO - This cool version - "Place a ballista on target empty tile. If the wizard stands beside the ballista, it fires a piercing shot in the opposite direction each turn."
+## TODO - This alternative version - "Place a ballista on target empty tile. If the wizard stands beside the ballista, it fires a piercing shot in the opposite direction each turn."
 class Trebuchet(Spell):
 	def on_init(self):
 		self.name = "Trebuchet"
@@ -8245,8 +8240,8 @@ class Trebuchet(Spell):
 		self.upgrades['void'] = (1, 6, "Void Machine", "Chasms can now be consumed by the catapult just like walls are.\nThe catapult operates even if the wizard is not adjacent.", [Tags.Arcane])
 
 	def get_description(self):
-		return ("Place a catapult on target empty tile\n. Each turn, if the wizard is adjacent, operate the catapult.\n"
-				"Operating it targets a random enemy more than 5 tiles away, which consumes one adjacent wall, dealing [{damage}:damage] [physical] damage in a [{radius}_tile:radius] burst.\n"
+		return ("Place a catapult on target empty tile.\nEach turn, if the wizard is adjacent, operate the catapult.\n"
+				"If operated it targets a random enemy more than 5 tiles away, which consumes one adjacent wall, in order to deal [{damage}:damage] [physical] damage in a [{radius}_tile:radius] burst.\n"
 				"Despawns after [{minion_duration}:minion_duration] turns.").format(**self.fmt_dict())
 
 	def get_impacted_tiles(self, x, y):
@@ -8898,7 +8893,7 @@ def linkhead_UI():
 	unit.asset = ["TcrsCustomModpack", "Units", "linked_head"]
 	return unit
 
-class StonecoilSerpent(Spell): ##Original concept named after the mtg card, but rapidly into a long segmented metal elemental
+class StonecoilSerpent(Spell): ##Original concept named after the mtg card, but changed into a long segmented metal elemental
 	def on_init(self):
 		self.name = "Ironcoiler"
 		self.tags = [Tags.Metallic, Tags.Conjuration, Tags.Dragon]
@@ -8983,7 +8978,7 @@ class HagathaSpell(Spell): ## Originally a spell to transform your level 5 spell
 
 		self.upgrades[('brewer','hp_cost')] = ([1,25], 4, "Slime Wizard", "Transforms your health into a slime brewer and equips it with a copy of your staff.\nDoes not work with mini staves.", [Tags.Blood])
 		self.upgrades[('soak','num_summons')] = ([1,5], 4, "Steamslimes", "Consume soaked on up to [5:num_targets] random units to produce red slime cubes, but they do not learn [slime] spells.", [Tags.Fire])
-		self.upgrades['words'] = (1, 4, "Slimetalker", "Also transform one of your level 7 word spells into a slime scholar.\nIt knows the spell on a 20 turn cooldown.", [Tags.Word])
+		self.upgrades['words'] = (1, 4, "Slimetalker", "Also transform one charge from one of your level 7 word spells into a slime scholar.\nIt knows the spell on a 20 turn cooldown.", [Tags.Word])
 
 	def get_description(self):
 		return ("Transform 2 of the charges from your level 3 and above [slime] spells, which have the [sorcery] or [enchantment] tags, into ice slime cubes.\n"
@@ -9056,7 +9051,8 @@ class Boltcutter(Spell):
 		self.name = "Boltcutter"
 		self.tags = [Tags.Metallic, Tags.Blood, Tags.Sorcery]
 		self.level = 8
-		
+		self.asset = ["TcrsCustomModpack", "Icons", "boltcutter_icon"]
+
 		self.hp_cost = 6
 		self.max_charges = 10
 		self.damage = 14
@@ -9068,7 +9064,7 @@ class Boltcutter(Spell):
 	def get_description(self):
 		return ("Fires bolts at the enemies closest to the edges of the realm. Deals [Physical] damage to the top-most enemy, and [Dark] damage to the bottom-most enemy.\n"
 				"Each bolt deals [{damage}:damage] to all units in its path.\n"
-				"Chooses an enemy randomly, if more than 1 is equidistant from the realm edge.").format(**self.fmt_dict())
+				"Chooses an enemy randomly, if more than 1 target is equidistant from the realm edge.").format(**self.fmt_dict())
 
 	def shoot_bolt(self, targets,  tag):
 		pass
@@ -9139,56 +9135,6 @@ class Boltcutter(Spell):
 			
 
 
-		yield
-
-
-class HillSlicer(Spell):
-	def on_init(self):
-		self.name = "Gunk Slicer"
-		self.tags = [Tags.Slime, Tags.Sorcery]
-		self.level = 1
-		self.description = "Deals damage in a line. The line extends vertically if cast closer to the wizard's location horizontally, and vice versa."
-
-		self.max_charges = 18
-		self.damage = 10
-		self.range = 4
-		
-		self.melee = True
-		self.cast_on_walls = True
-
-	def y_line(self, x, y):
-		length = self.get_stat('range')
-		points = []
-		for i in range(x-length, x+length+1):
-			p = Point(i,y)
-			if self.caster.level.is_point_in_bounds(p):
-				points.append(p)
-		return points
-
-	def x_line(self, x, y):
-		length = self.get_stat('range')
-		points = []
-		for i in range(y-length, y+length+1):
-			p = Point(x,i)
-			if self.caster.level.is_point_in_bounds(p):
-				points.append(p)
-		return points
-
-	def get_impacted_tiles(self, x, y):
-		x_dist = abs(self.owner.x - x)
-		y_dist = abs(self.owner.y - y)
-		tiles = []
-		if x_dist >= y_dist:
-			tiles.extend(self.x_line(x, y))
-		if y_dist >= x_dist:
-			tiles.extend(self.y_line(x, y))
-			
-		return tiles
-
-	def cast(self, x, y):
-		for t in self.get_impacted_tiles(x, y):
-			self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Poison, self)
-			self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Physical, self)
 		yield
 
 
@@ -9382,7 +9328,8 @@ class CultistOldFaith(Spell):
 		self.name = "Old Faith Cultist"
 		self.tags = [Tags.Dark, Tags.Conjuration, Tags.Chaos]
 		self.level = 2
-		self.description = "Summon a cultist, which respawns as the most recent [demon] which died, except other cultist-demons.\nInherits max hp, tags, resistances, and adds all of its spell damage to the cultist's spells."
+		self.description = "Summon a cultist, which respawns as the most recent [demon] which died, except other cultist-demons.\nInherits max hp, tags, resistances, and then adds all of its spell damage to the cultist's spells."
+		self.asset = ["TcrsCustomModpack", "Icons", "cultist_reincarnator"]
 
 		self.max_charges = 4
 		self.range = 5
@@ -9425,6 +9372,57 @@ class CultistOldFaith(Spell):
 	def cast(self, x, y):
 		unit = self.make_unit()
 		self.summon(unit, Point(x, y))
+		yield
+
+
+
+class HillSlicer(Spell):
+	def on_init(self):
+		self.name = "Gunk Slicer"
+		self.tags = [Tags.Slime, Tags.Sorcery]
+		self.level = 1
+		self.description = "Deals damage in a line. The line extends vertically if cast closer to the wizard's location horizontally, and vice versa."
+
+		self.max_charges = 18
+		self.damage = 10
+		self.range = 4
+		
+		self.melee = True
+		self.cast_on_walls = True
+
+	def y_line(self, x, y):
+		length = self.get_stat('range')
+		points = []
+		for i in range(x-length, x+length+1):
+			p = Point(i,y)
+			if self.caster.level.is_point_in_bounds(p):
+				points.append(p)
+		return points
+
+	def x_line(self, x, y):
+		length = self.get_stat('range')
+		points = []
+		for i in range(y-length, y+length+1):
+			p = Point(x,i)
+			if self.caster.level.is_point_in_bounds(p):
+				points.append(p)
+		return points
+
+	def get_impacted_tiles(self, x, y):
+		x_dist = abs(self.owner.x - x)
+		y_dist = abs(self.owner.y - y)
+		tiles = []
+		if x_dist >= y_dist:
+			tiles.extend(self.x_line(x, y))
+		if y_dist >= x_dist:
+			tiles.extend(self.y_line(x, y))
+			
+		return tiles
+
+	def cast(self, x, y):
+		for t in self.get_impacted_tiles(x, y):
+			self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Poison, self)
+			self.owner.level.deal_damage(t.x, t.y, self.get_stat('damage'), Tags.Physical, self)
 		yield
 
 

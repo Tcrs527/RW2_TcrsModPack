@@ -181,14 +181,3 @@ def advance_new(self, orders=None):
 	return True
 	
 Unit.advance = advance_new
-
-
-
-# import inspect #In case I have to launch and aura damage isn't in the tooltip yet.
-# def get_RiftWizard():
-# 	for f in inspect.stack()[::-1]:
-# 		if "file 'RiftWizard2.py'" in str(f):
-# 			return inspect.getmodule(f[0])
-# 	return inspect.getmodule(f[0])
-# RiftWizard = get_RiftWizard()
-# RiftWizard.tooltip_colors['aura_damage'] = Tags.Enchantment.color
