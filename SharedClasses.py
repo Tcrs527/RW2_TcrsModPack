@@ -1060,8 +1060,9 @@ class GalvanizationTriggers(Buff): ##A bit of a nightmare class trying to cover 
 			else:
 				self.owner.level.deal_damage(self.owner.x, self.owner.y, -evt.damage, Tags.Heal, self)
 				self.transformation(self.spell.get_stat('duration'))
-		elif evt.damage_type == Tags.Fire and self.spell.get_stat('furnace'):
-			self.transformation(self.spell.get_stat('duration'))
+		elif evt.damage_type == Tags.Fire and self.spell != None:
+				if self.spell.get_stat('furnace'):
+					self.transformation(self.spell.get_stat('duration'))
 
 def GalvanizedHorror(spell=None):
 	unit = Unit()

@@ -3017,11 +3017,10 @@ class ArmageddonEye(Upgrade):
 		self.tags = [Tags.Eye, Tags.Chaos, Tags.Metallic]
 		self.asset = ["TcrsCustomModpack", "Icons", "eye_of_armageddon"]
 		
-		self.description = "Every [8:shot_cooldown] turns, kill all unshielded enemies in line of sight, if they have less current hp than your total SP spent on [Chaos], [Eye], and [Metallic] magic."
+		self.description = "Every [8:shot_cooldown] turns kill all unshielded units, including you, in your line of sight, if they have less current hp than your total SP spent on [Chaos], [Eye], and [Metallic] magic."
 		self.owner_triggers[EventOnUnitAdded] = self.on_enter
-		self.count = 0
+		self.count = 8
 		self.shot_cooldown = 8
-		#self.stats.append('shot_cooldown')
 
 	def cull_the_weak(self, mastery):
 		units = [u for u in self.owner.level.units if u.shields == 0 and u.cur_hp < mastery]
@@ -3031,17 +3030,20 @@ class ArmageddonEye(Upgrade):
 			self.owner.level.show_effect(u.x, u.y, Tags.Chaos)
 
 	def on_enter(self, evt):
-		self.count = 0
+		mastery = self.owner.get_mastery(Tags.Chaos) + self.owner.get_mastery(Tags.Metallic) + self.owner.get_mastery(Tags.Eye)
+		self.count = self.get_stat('shot_cooldown')
+		self.description = ("When you enter a realm, and every [8:shot_cooldown] turns, kill all unshielded enemies in line of sight, if they have less current hp than your total SP spent on [Chaos], [Eye], and [Metallic] magic."+
+							"\nTurns remaining: " + str(self.count) + "\nTotal SP spent: " + str(mastery))
 
 	def on_advance(self):
 		mastery = self.owner.get_mastery(Tags.Chaos) + self.owner.get_mastery(Tags.Metallic) + self.owner.get_mastery(Tags.Eye)
+		self.count -= 1
+		if self.count <= 0:
+			self.count = self.get_stat('shot_cooldown')
+			self.cull_the_weak(mastery=mastery)
+		
 		self.description = ("When you enter a realm, and every [8:shot_cooldown] turns, kill all unshielded enemies in line of sight, if they have less current hp than your total SP spent on [Chaos], [Eye], and [Metallic] magic."+
-							"\nTotal SP: " + str(mastery))
-		self.count += 1
-		if self.count < self.get_stat('shot_cooldown'):
-			return
-		self.count = 0
-		self.cull_the_weak(mastery=mastery)
+							"\nTurns remaining: " + str(self.count) + " - Total SP spent: " + str(mastery))
 
 class IceWyrmSong(Upgrade):
 	def on_init(self):
@@ -3055,7 +3057,7 @@ class IceWyrmSong(Upgrade):
 	def on_pre_advance(self):
 		mastery = self.owner.get_mastery(Tags.Dragon) + self.owner.get_mastery(Tags.Word) + self.owner.get_mastery(Tags.Ice)
 		self.description = ("At the start of your turn, if you health total is lower than your total SP spent on [Dragon], [Word] and [Ice] magic, regenerate 10 hp."
-							"\nTotal SP: " + str(mastery))
+							"\nTotal SP spent: " + str(mastery))
 		if self.owner.cur_hp < mastery:
 			self.owner.deal_damage(-10, Tags.Heal, self)
 
@@ -3383,10 +3385,13 @@ class HeatedSlimeArmor(Upgrade):
 		self.level = 4
 		self.tags = [Tags.Fire, Tags.Dark, Tags.Slime]
 		self.asset = ["TcrsCustomModpack", "Icons", "heated_slime_armor_icon"]
-		self.minion_health = 38
-		self.charges = 10
 		#self.global_triggers[EventOnSpellCast] = self.on_cast
 		self.global_triggers[EventOnMoved] = self.on_move
+
+	def on_enter(self, evt):
+		mastery = self.owner.get_mastery(Tags.Fire) + self.owner.get_mastery(Tags.Dark) + self.owner.get_mastery(Tags.Slime)
+		self.description = ("Whenever a hostile unit enters a tile adjacent to you, deal [fire], [dark], or [poison] damage equal to all of the SP spent on [fire], [dark], and [slime] magic to it." +
+							"Total SP Spent: " + str(mastery)).format(**self.fmt_dict())
 
 	def get_description(self):
 		return ("Whenever a hostile unit enters a tile adjacent to you, deal [fire], [dark], or [poison] damage equal to all of the SP spent on [fire], [dark], and [slime] magic to it.").format(**self.fmt_dict())
@@ -3472,6 +3477,7 @@ class TeleportationSickness(Buff):
 		self.buff_type = BUFF_TYPE_CURSE
 		self.color = Tags.Translocation.color
 		self.asset = ['status', 'sealed_fate']
+		self.resists[Tags.Arcane] = -5
 
 	def on_advance(self):
 		if self.turns_left == 1:
@@ -3482,26 +3488,28 @@ class TeleportationSickness(Buff):
 class Teleportitis(Upgrade):
 	def on_init(self):
 		self.name = "Teleportitis"
-		self.level = 4
+		self.level = 6
 		self.tags = [Tags.Nature, Tags.Arcane, Tags.Translocation]
 		self.asset = ["TcrsCustomModpack", "Icons", "teleportitis_icon"]
 		self.global_triggers[EventOnMoved] = self.on_tele
 		self.global_triggers[EventOnSpellCast] = self.on_cast
-		self.count = 0
-		self.damage = 10
 
 	def get_description(self):
 		return ("When any unit is targeted by any [nature] spell, including you, they are teleported to a random tile.\n"
-				"When an enemy is teleported by any source, it gains Teleportation Sickness for 7 turns. This effect can stack.\n"
-				"After 7 turns, Teleportation Sickness deals [arcane] damage to the unit equal to the total SP spent on [nature], [arcane], and [translocation] magic to the unit.").format(**self.fmt_dict())
+				"When an enemy is teleported by any source, it gains Teleportitis for 7 turns, reducing arcane resistance by 5. This effect can stack.\n"
+				"As the effect ends, it deals [arcane] damage to the unit equal to the total SP spent on [nature], [arcane], and [translocation] magic to the unit.").format(**self.fmt_dict())
 
-	def on_cast(self, evt):
-		if Tags.Nature not in evt.spell.tags:
-			return
+	def on_enter(self, evt):
+		mastery = self.owner.get_mastery(Tags.Nature) + self.owner.get_mastery(Tags.Arcane) + self.owner.get_mastery(Tags.Translocation)
+		self.description = ("When any unit is targeted by any [nature] spell, including you, they are teleported to a random tile.\n"
+				"When an enemy is teleported by any source, it gains Teleportitis for 7 turns, reducing arcane resistance by 5. This effect can stack.\n"
+				"As the effect ends, it deals [arcane] damage to the unit equal to the total SP spent on [nature], [arcane], and [translocation] magic to the unit."
+				"Total SP Spent: " + str(mastery)).format(**self.fmt_dict())
+
+	def teleport_target(self, evt):
 		unit = self.owner.level.get_unit_at(evt.x, evt.y)
 		if unit == None:
 			return
-		##Modified Disperse code
 		self.owner.level.show_effect(evt.x, evt.y, Tags.Translocation)
 		possible_points = []
 		for i in range(len(self.owner.level.tiles)):
@@ -3515,6 +3523,12 @@ class Teleportitis(Upgrade):
 		target_point = random.choice(possible_points)
 		self.owner.level.act_move(unit, target_point.x, target_point.y, teleport=True)
 		self.owner.level.show_effect(unit.x, unit.y, Tags.Translocation)
+		yield
+
+	def on_cast(self,evt):
+		if Tags.Nature not in evt.spell.tags:
+			return
+		self.owner.level.queue_spell(self.teleport_target(evt))
 
 	def on_tele(self, evt):
 		if not evt.teleport:
